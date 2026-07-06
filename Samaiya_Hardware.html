@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -59,13 +59,37 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 .step { background:#f5f5f5; border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:14px; line-height:1.6; }
 .step b { color:#b71c1c; }
 .connected-banner { background:#e8f5e9; border:2px solid #4caf50; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:14px; color:#2e7d32; font-weight:bold; text-align:center; }
+.login-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; display:flex; align-items:center; justify-content:center; }
+.login-box { background:white; border-radius:16px; padding:30px 20px; max-width:340px; width:95%; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+.login-box h2 { color:#b71c1c; font-size:24px; margin-bottom:20px; }
+.login-box p { color:#666; font-size:14px; margin-bottom:20px; }
+.login-btn { width:100%; padding:14px; margin-bottom:10px; border:none; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; }
+.login-btn-user1 { background:#b71c1c; color:white; }
+.login-btn-user2 { background:#1565c0; color:white; }
+.user-badge { display:inline-block; background:#f5f5f5; padding:6px 12px; border-radius:20px; font-size:12px; color:#555; margin-bottom:8px; }
 </style>
 </head>
 <body>
 
+<!-- Login Screen -->
+<div id="login-overlay" class="login-overlay" style="display:none">
+  <div class="login-box">
+    <h2>&#128274; Login</h2>
+    <p>Who is using the app?</p>
+    <button class="login-btn login-btn-user1" onclick="loginUser('user1','Sanjeev')">Sanjeev (&#128483;)</button>
+    <button class="login-btn login-btn-user2" onclick="loginUser('user2','Ashish')">Ashish (&#128483;)</button>
+  </div>
+</div>
+
 <header>
   <h1>&#128296; Samaiya Hardware</h1>
-  <p><span class="sync-dot off" id="sync-dot"></span><span id="sync-status">Not connected to cloud</span></p>
+  <p style="display:flex; align-items:center; justify-content:center; gap:8px; margin:8px 0 0">
+    <span class="sync-dot off" id="sync-dot"></span><span id="sync-status">Not connected to cloud</span>
+  </p>
+  <p style="font-size:12px; margin-top:6px;">
+    <span id="current-user" style="background:#ffeb3b; color:#333; padding:4px 10px; border-radius:12px; font-weight:bold; display:inline-block; margin-right:8px;"></span>
+    <button onclick="logoutUser()" style="background:none; border:1px solid rgba(255,255,255,0.6); color:white; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Logout</button>
+  </p>
 </header>
 
 <div class="tabs">
@@ -286,14 +310,63 @@ var LOCAL = {
   setUdhaar:  function(v){ localStorage.setItem('sh_udhaar',JSON.stringify(v)); }
 };
 
+// ── User session management ─────────────────────────────
+var currentUserId = null;
+var currentUserName = null;
+
+function loginUser(userId, userName){
+  currentUserId = userId;
+  currentUserName = userName;
+  localStorage.setItem('sh_current_user_id', userId);
+  localStorage.setItem('sh_current_user_name', userName);
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('current-user').textContent = '👤 ' + userName;
+  renderDashboard();
+}
+
+function logoutUser(){
+  currentUserId = null;
+  currentUserName = null;
+  localStorage.removeItem('sh_current_user_id');
+  localStorage.removeItem('sh_current_user_name');
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('current-user').textContent = '';
+}
+
+function checkLogin(){
+  var savedId = localStorage.getItem('sh_current_user_id');
+  var savedName = localStorage.getItem('sh_current_user_name');
+  if(savedId && savedName){
+    currentUserId = savedId;
+    currentUserName = savedName;
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('current-user').textContent = '👤 ' + savedName;
+  } else {
+    document.getElementById('login-overlay').style.display = 'flex';
+  }
+}
+};
+
 // ── Firebase state ──────────────────────────────────────
 var db = null;
 var fbRef = null;
 var useFirebase = false;
 var liveData = { bikri: [], kharcha: [], udhaar: [] };
 
+// Hardcoded Firebase config (pre-filled for easy setup)
+var HARDCODED_CONFIG = {
+  apiKey: "AIzaSyAViF8AGCa2_lxknmHotLKnE5L0TMPOYdQ",
+  authDomain: "samaiya-hardware.firebaseapp.com",
+  dbUrl: "https://samaiya-hardware-default-rtdb.firebaseio.com",
+  projectId: "samaiya-hardware"
+};
+
 function getSavedConfig(){
-  try { return JSON.parse(localStorage.getItem('sh_fb_config')||'null'); } catch(e){ return null; }
+  // Check if user saved custom config in localStorage
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem('sh_fb_config')||'null'); } catch(e){ }
+  // Return saved config if exists, otherwise return hardcoded
+  return saved || HARDCODED_CONFIG;
 }
 
 function initFirebase(cfg){
@@ -411,6 +484,11 @@ function loadConfigFields(){
     document.getElementById('cfg-dbUrl').value      = cfg.dbUrl||'';
     document.getElementById('cfg-projectId').value  = cfg.projectId||'';
     document.getElementById('setup-connected-msg').style.display = useFirebase?'block':'none';
+    // Show message if using hardcoded config
+    if(cfg === HARDCODED_CONFIG && useFirebase){
+      var msg = document.getElementById('setup-connected-msg');
+      msg.innerHTML = '&#9989; Connected to Firebase! (Pre-configured) Data syncs automatically on both phones.';
+    }
   }
 }
 
@@ -455,6 +533,7 @@ function selectRPayMode(m){
 
 // ── Bikri ───────────────────────────────────────────────
 function addBikri(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
   var amt  = parseFloat(document.getElementById('b-amount').value);
   var desc = document.getElementById('b-desc').value.trim();
   var date = document.getElementById('b-date').value;
@@ -463,32 +542,34 @@ function addBikri(){
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
   if(!date){ toast('\u274C Select date'); return; }
   if(payMode==='online'&&!plat){ toast('\u274C Select payment platform'); return; }
-  var obj = {id:Date.now(),date:date,amt:amt,desc:desc,mode:payMode,platform:plat,account:acc};
+  var obj = {id:Date.now(),date:date,amt:amt,desc:desc,mode:payMode,platform:plat,account:acc,userId:currentUserId,userName:currentUserName,editTime:new Date().toLocaleString()};
   pushData('bikri',obj,function(){
     ['b-amount','b-desc','b-account'].forEach(function(i){ document.getElementById(i).value=''; });
     document.getElementById('b-platform').value='';
     selectPayMode('cash');
-    toast('\u2705 Sale saved!');
+    toast('\u2705 Sale saved by '+currentUserName+'!');
     renderDashboard();
   });
 }
 
 // ── Kharcha ─────────────────────────────────────────────
 function addKharcha(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
   var amt  = parseFloat(document.getElementById('k-amount').value);
   var desc = document.getElementById('k-desc').value.trim();
   var date = document.getElementById('k-date').value;
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
   if(!date){ toast('\u274C Select date'); return; }
-  pushData('kharcha',{id:Date.now(),date:date,amt:amt,desc:desc},function(){
+  pushData('kharcha',{id:Date.now(),date:date,amt:amt,desc:desc,userId:currentUserId,userName:currentUserName,editTime:new Date().toLocaleString()},function(){
     ['k-amount','k-desc'].forEach(function(i){ document.getElementById(i).value=''; });
-    toast('\u2705 Kharcha saved!');
+    toast('\u2705 Kharcha saved by '+currentUserName+'!');
     renderDashboard();
   });
 }
 
 // ── Udhaar ──────────────────────────────────────────────
 function addUdhaar(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
   var name  = document.getElementById('u-name').value.trim();
   var phone = document.getElementById('u-phone').value.trim();
   var amt   = parseFloat(document.getElementById('u-amount').value);
@@ -498,9 +579,9 @@ function addUdhaar(){
   if(!phone||phone.length<6){ toast('\u274C Enter valid mobile number'); return; }
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
   if(!date){ toast('\u274C Select date'); return; }
-  pushData('udhaar',{id:Date.now(),date:date,name:name,phone:phone,amt:amt,remaining:amt,desc:desc,status:'pending',payments:[]},function(){
+  pushData('udhaar',{id:Date.now(),date:date,name:name,phone:phone,amt:amt,remaining:amt,desc:desc,status:'pending',payments:[],userId:currentUserId,userName:currentUserName,editTime:new Date().toLocaleString()},function(){
     ['u-name','u-phone','u-amount','u-desc'].forEach(function(i){ document.getElementById(i).value=''; });
-    toast('\u2705 Udhaar saved!');
+    toast('\u2705 Udhaar saved by '+currentUserName+'!');
     renderUdhaar();
   });
 }
@@ -518,7 +599,7 @@ function renderUdhaar(){
     ul.innerHTML=pending.map(function(u){
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name">'+u.name+'</div>'+
-        '<div class="li-sub">\uD83D\uDCDE '+u.phone+' \u00B7 '+fmtDate(u.date)+(u.desc?' \u00B7 '+u.desc:'')+'</div>'+
+        '<div class="li-sub">\uD83D\uDCDE '+u.phone+' \u00B7 '+fmtDate(u.date)+(u.desc?' \u00B7 '+u.desc:'')+'<br><small style="color:#999;font-size:10px">Added by '+(u.userName||'Unknown')+'</small></div>'+
         (u.remaining<u.amt?'<div class="li-sub" style="color:#e65100">Remaining: '+rs(u.remaining)+' of '+rs(u.amt)+'</div>':'')+
         '</div><div style="text-align:right">'+
         '<div class="li-amt val-orange">'+rs(u.remaining)+'</div>'+
@@ -532,7 +613,7 @@ function renderUdhaar(){
     cl.innerHTML=cleared.map(function(u){
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name">'+u.name+' <span class="badge badge-green">Cleared</span></div>'+
-        '<div class="li-sub">\uD83D\uDCDE '+u.phone+' \u00B7 '+fmtDate(u.date)+(u.desc?' \u00B7 '+u.desc:'')+'</div>'+
+        '<div class="li-sub">\uD83D\uDCDE '+u.phone+' \u00B7 '+fmtDate(u.date)+(u.desc?' \u00B7 '+u.desc:'')+'<br><small style="color:#999;font-size:10px">Added by '+(u.userName||'Unknown')+'</small></div>'+
         '</div><div class="li-amt val-green">'+rs(u.amt)+'</div></div></div>';
     }).join('');
   }
@@ -552,6 +633,7 @@ function openReceiveModal(id,fbKey){
 function closeModal(){ document.getElementById('receive-modal').classList.remove('open'); }
 
 function receiveUdhaar(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
   var id   = currentUId;
   var fbKey= currentUFbKey;
   var amt  = parseFloat(document.getElementById('rm-amount').value);
@@ -565,12 +647,12 @@ function receiveUdhaar(){
   if(amt>u.remaining){ toast('\u274C Amount more than remaining '+rs(u.remaining)); return; }
   u.remaining -= amt;
   if(!u.payments) u.payments=[];
-  u.payments.push({date:todayStr(),amt:amt,mode:rPayMode,platform:plat,account:acc});
+  u.payments.push({date:todayStr(),amt:amt,mode:rPayMode,platform:plat,account:acc,receivedBy:currentUserName});
   if(u.remaining<=0){ u.remaining=0; u.status='cleared'; }
   updateData('udhaar',fbKey,id,u,function(){
-    pushData('bikri',{id:Date.now(),date:todayStr(),amt:amt,desc:'Udhaar received from '+u.name+' ('+u.phone+')',mode:rPayMode,platform:plat,account:acc},function(){
+    pushData('bikri',{id:Date.now(),date:todayStr(),amt:amt,desc:'Udhaar received from '+u.name+' ('+u.phone+')',mode:rPayMode,platform:plat,account:acc,userId:currentUserId,userName:currentUserName,editTime:new Date().toLocaleString()},function(){
       closeModal();
-      toast(u.status==='cleared'?'\u2705 '+u.name+"'s udhaar cleared!":'\u2705 '+rs(amt)+' received from '+u.name);
+      toast(u.status==='cleared'?'\u2705 '+u.name+"'s udhaar cleared by "+currentUserName+"!":'\u2705 '+rs(amt)+' received from '+u.name+' by '+currentUserName);
       renderUdhaar();
       renderDashboard();
     });
@@ -623,11 +705,12 @@ function renderDashboard(){
         :'<span class="badge badge-blue">'+(x.platform||'Online')+(x.account?' \u00B7 '+x.account:'')+'</span>';
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name" style="color:#2e7d32">\u2705 '+(x.desc||'Sale')+'</div>'+
-        '<div class="li-sub">'+tag+'</div></div>'+
+        '<div class="li-sub">'+tag+'<br><small style="color:#999;font-size:11px;margin-top:3px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
         '<div class="li-amt val-green">+'+rs(x.amt)+'</div></div></div>';
     } else {
       return '<div class="list-item"><div class="li-top"><div>'+
-        '<div class="li-name" style="color:#b71c1c">\uD83D\uDCB8 '+(x.desc||'Kharcha')+'</div></div>'+
+        '<div class="li-name" style="color:#b71c1c">\uD83D\uDCB8 '+(x.desc||'Kharcha')+'</div>'+
+        '<div class="li-sub"><small style="color:#999;font-size:11px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
         '<div class="li-amt val-red">-'+rs(x.amt)+'</div></div></div>';
     }
   }).join('');
@@ -686,6 +769,8 @@ document.getElementById('u-date').value    = todayStr();
 liveData.bikri   = LOCAL.getBikri();
 liveData.kharcha = LOCAL.getKharcha();
 liveData.udhaar  = LOCAL.getUdhaar();
+
+checkLogin();
 
 var savedCfg = getSavedConfig();
 if(savedCfg && savedCfg.apiKey && savedCfg.dbUrl){ initFirebase(savedCfg); }
