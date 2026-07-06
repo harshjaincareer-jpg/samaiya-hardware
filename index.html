@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -75,9 +75,15 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 <div id="login-overlay" class="login-overlay" style="display:none">
   <div class="login-box">
     <h2>&#128274; Login</h2>
-    <p>Who is using the app?</p>
-    <button class="login-btn login-btn-user1" onclick="loginUser('user1','Sanjeev')">Sanjeev (&#128483;)</button>
-    <button class="login-btn login-btn-user2" onclick="loginUser('user2','Ashish')">Ashish (&#128483;)</button>
+    <p>Enter your credentials</p>
+    <div style="margin-bottom:14px;">
+      <label style="margin-bottom:6px; text-align:left; display:block;">Username</label>
+      <input type="text" id="login-username" placeholder="e.g. sanjeev or ashish" style="margin-bottom:10px;" onkeypress="if(event.key==='Enter') verifyLogin();"/>
+      <label style="margin-bottom:6px; text-align:left; display:block;">Password</label>
+      <input type="password" id="login-password" placeholder="Enter password" style="margin-bottom:10px;" onkeypress="if(event.key==='Enter') verifyLogin();"/>
+      <div id="login-error" style="color:#b71c1c; font-size:12px; margin-bottom:10px; display:none;"></div>
+      <button class="btn btn-blue" onclick="verifyLogin()">Login</button>
+    </div>
   </div>
 </div>
 
@@ -102,42 +108,29 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 
 <!-- SETUP PAGE -->
 <div id="page-setup" class="page">
-  <div id="setup-connected-msg" style="display:none" class="connected-banner">
+  <div id="setup-connected-msg" class="connected-banner">
     &#9989; Connected to Firebase! Data syncs automatically on both phones.
   </div>
 
-  <div class="setup-box">
-    <h3>&#128274; One-time Firebase Setup</h3>
-    <p style="font-size:13px;color:#555;margin-bottom:10px;">Do this once. After setup, data saves permanently in cloud and syncs on all phones automatically.</p>
-
-    <div class="step"><b>Step 1:</b> Open <b>console.firebase.google.com</b> on a laptop/PC (ask someone or use a cyber cafe once)</div>
-    <div class="step"><b>Step 2:</b> Click <b>"Add project"</b> &rarr; Name it <b>samaiya-hardware</b> &rarr; Continue &rarr; Create project</div>
-    <div class="step"><b>Step 3:</b> Click <b>"Web"</b> icon (&lt;/&gt;) &rarr; Register app &rarr; Copy the <b>firebaseConfig</b> object</div>
-    <div class="step"><b>Step 4:</b> Go to <b>Build &rarr; Realtime Database &rarr; Create database &rarr; Start in test mode &rarr; Enable</b></div>
-    <div class="step"><b>Step 5:</b> Paste your config values in the fields below and tap Save</div>
-  </div>
-
-  <div class="card">
-    <h3>&#128276; Enter Your Firebase Config</h3>
-    <label>API Key</label>
-    <input type="text" id="cfg-apiKey" placeholder="AIzaSy..."/>
-    <label>Auth Domain</label>
-    <input type="text" id="cfg-authDomain" placeholder="your-app.firebaseapp.com"/>
-    <label>Database URL</label>
-    <input type="text" id="cfg-dbUrl" placeholder="https://your-app-default-rtdb.firebaseio.com"/>
-    <label>Project ID</label>
-    <input type="text" id="cfg-projectId" placeholder="your-app-id"/>
-    <button class="btn btn-blue" onclick="saveFirebaseConfig()">&#128190; Save &amp; Connect</button>
-    <button class="btn btn-gray" onclick="clearFirebaseConfig()">&#128465; Disconnect / Reset Config</button>
+  <div class="card" style="background:#e3f2fd;">
+    <h3 style="color:#1565c0;">👥 Login Credentials</h3>
+    <p style="font-size:14px;color:#333;line-height:1.8;">
+      <b>User 1:</b><br>
+      Username: <code style="background:#f5f5f5; padding:2px 6px; border-radius:4px;">sanjeev</code><br>
+      Password: <code style="background:#f5f5f5; padding:2px 6px; border-radius:4px;">sanjeev7746</code><br><br>
+      <b>User 2:</b><br>
+      Username: <code style="background:#f5f5f5; padding:2px 6px; border-radius:4px;">ashish</code><br>
+      Password: <code style="background:#f5f5f5; padding:2px 6px; border-radius:4px;">ashish777</code>
+    </p>
   </div>
 
   <div class="card" style="background:#e3f2fd;">
     <h3 style="color:#1565c0;">&#128241; Share with 2nd Person</h3>
     <p style="font-size:14px;color:#333;line-height:1.7;">
-      1. Send the <b>Samaiya_Hardware.html</b> file to the second phone (via WhatsApp)<br>
+      1. Send the <b>index.html</b> file to the second phone (via WhatsApp, email, etc.)<br>
       2. Open it in Chrome on the second phone<br>
-      3. Go to <b>Setup tab</b> and enter the <b>same Firebase config</b><br>
-      4. Both phones will now sync automatically &#128257;
+      3. Both phones will automatically sync all data in real-time &#128257;<br>
+      4. Use the same login credentials on both phones
     </p>
   </div>
 </div>
@@ -314,6 +307,33 @@ var LOCAL = {
 var currentUserId = null;
 var currentUserName = null;
 
+// User credentials database
+var USERS = {
+  'sanjeev': { id: 'user1', name: 'Sanjeev', password: 'sanjeev7746' },
+  'ashish': { id: 'user2', name: 'Ashish', password: 'ashish777' }
+};
+
+function verifyLogin(){
+  var username = document.getElementById('login-username').value.trim().toLowerCase();
+  var password = document.getElementById('login-password').value;
+  var errorDiv = document.getElementById('login-error');
+  
+  if(!username || !password){
+    errorDiv.textContent = '❌ Enter username and password';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  var user = USERS[username];
+  if(!user || user.password !== password){
+    errorDiv.textContent = '❌ Invalid username or password';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  loginUser(user.id, user.name);
+}
+
 function loginUser(userId, userName){
   currentUserId = userId;
   currentUserName = userName;
@@ -321,6 +341,9 @@ function loginUser(userId, userName){
   localStorage.setItem('sh_current_user_name', userName);
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('current-user').textContent = '👤 ' + userName;
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
   renderDashboard();
 }
 
@@ -476,42 +499,7 @@ function showPage(name){
 
 // ── Setup ───────────────────────────────────────────────
 function loadConfigFields(){
-  var cfg = getSavedConfig();
-  if(cfg){
-    document.getElementById('cfg-apiKey').value     = cfg.apiKey||'';
-    document.getElementById('cfg-authDomain').value = cfg.authDomain||'';
-    document.getElementById('cfg-dbUrl').value      = cfg.dbUrl||'';
-    document.getElementById('cfg-projectId').value  = cfg.projectId||'';
-    document.getElementById('setup-connected-msg').style.display = useFirebase?'block':'none';
-    // Show message if using hardcoded config
-    if(cfg === HARDCODED_CONFIG && useFirebase){
-      var msg = document.getElementById('setup-connected-msg');
-      msg.innerHTML = '&#9989; Connected to Firebase! (Pre-configured) Data syncs automatically on both phones.';
-    }
-  }
-}
-
-function saveFirebaseConfig(){
-  var cfg = {
-    apiKey:      document.getElementById('cfg-apiKey').value.trim(),
-    authDomain:  document.getElementById('cfg-authDomain').value.trim(),
-    dbUrl:       document.getElementById('cfg-dbUrl').value.trim(),
-    projectId:   document.getElementById('cfg-projectId').value.trim()
-  };
-  if(!cfg.apiKey||!cfg.dbUrl){ toast('\u274C Fill API Key and Database URL at minimum'); return; }
-  localStorage.setItem('sh_fb_config', JSON.stringify(cfg));
-  initFirebase(cfg);
-  toast('\u2705 Connecting to Firebase...');
-}
-
-function clearFirebaseConfig(){
-  if(!confirm('Disconnect from Firebase? Local data is kept.')) return;
-  localStorage.removeItem('sh_fb_config');
-  useFirebase=false;
-  db=null; fbRef=null;
-  setSyncStatus(false);
-  document.getElementById('setup-connected-msg').style.display='none';
-  toast('Disconnected from Firebase');
+  // Setup page loads - no manual config needed, Firebase auto-connects
 }
 
 // ── Payment mode ────────────────────────────────────────
@@ -771,9 +759,8 @@ liveData.udhaar  = LOCAL.getUdhaar();
 
 checkLogin();
 
-var savedCfg = getSavedConfig();
-if(savedCfg && savedCfg.apiKey && savedCfg.dbUrl){ initFirebase(savedCfg); }
-else { renderDashboard(); }
+// Always initialize Firebase with hardcoded config (no manual setup needed)
+initFirebase(HARDCODED_CONFIG);
 </script>
 </body>
 </html>
