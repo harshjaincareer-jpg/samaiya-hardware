@@ -666,8 +666,21 @@ function updateData(path, fbKey, id, obj, cb){
 
 function deleteData(path, fbKey, id, cb){
   if(useFirebase && fbKey){
+    var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':path==='udhaar'?'sh_udhaar':'sh_stock';
+    var prevArr = JSON.parse(localStorage.getItem(key)||'[]');
+    var nextArr = prevArr.filter(function(x){ return x.id!==id; });
+
+    // Optimistic local delete prevents sync-merge from re-adding the deleted row.
+    localStorage.setItem(key, JSON.stringify(nextArr));
+    liveData[path] = nextArr;
+
     fbRef.child(path+'/'+fbKey).remove(function(err){
-      if(err){ toast('\u274C Delete failed: '+err.message); }
+      if(err){
+        // Roll back local cache if cloud delete fails.
+        localStorage.setItem(key, JSON.stringify(prevArr));
+        liveData[path] = prevArr;
+        toast('\u274C Delete failed: '+err.message);
+      }
       else { if(cb) cb(); }
     });
   } else {
