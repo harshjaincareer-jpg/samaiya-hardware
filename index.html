@@ -219,8 +219,16 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
     <h3>&#128230; Add / Update Product Stock</h3>
     <label>Category</label>
     <select id="s-category" onchange="onStockCategoryChange()"></select>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:-2px;margin-bottom:10px;">
+      <input type="text" id="s-new-category" placeholder="Add new category" style="margin-bottom:0;flex:1;"/>
+      <button class="btn btn-gray" type="button" style="width:auto;padding:10px 12px;margin-bottom:0;" onclick="addStockCategory()">Add Category</button>
+    </div>
     <label>Product Name</label>
     <select id="s-name"></select>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:-2px;margin-bottom:10px;">
+      <input type="text" id="s-new-product" placeholder="Add new product in selected category" style="margin-bottom:0;flex:1;"/>
+      <button class="btn btn-gray" type="button" style="width:auto;padding:10px 12px;margin-bottom:0;" onclick="addStockProduct()">Add Product</button>
+    </div>
     <label>Quantity</label>
     <input type="number" id="s-qty" placeholder="e.g. 50" min="0"/>
     <label>Unit</label>
@@ -477,6 +485,7 @@ var useFirebase = false;
 var liveData = { bikri: [], kharcha: [], udhaar: [], stock: [] };
 var isRecoveryWriteInProgress = false;
 var isStockCatalogSyncInProgress = false;
+var isCatalogPushInProgress = false;
 
 // Hardcoded Firebase config (pre-filled for easy setup)
 var HARDCODED_CONFIG = {
@@ -562,6 +571,18 @@ function saveSafetyBackup(tag){
 function listenFirebase(){
   fbRef.on('value', function(snap){
     var d = snap.val() || {};
+    var remoteCatalog = normalizeCatalog(d.stockCatalog);
+    if(remoteCatalog.length){
+      if(catalogSignature(remoteCatalog)!==catalogSignature(STOCK_CATALOG)){
+        STOCK_CATALOG = remoteCatalog;
+        saveStockCatalog(STOCK_CATALOG);
+        renderStockCategoryOptions();
+        onStockCategoryChange();
+      }
+    } else {
+      syncStockCatalog();
+    }
+
     var toArr = function(obj){ return obj ? Object.keys(obj).map(function(k){ return Object.assign({},obj[k],{fbKey:k}); }) : []; };
     var remoteData = {
       bikri: toArr(d.bikri),
@@ -737,7 +758,7 @@ function loadConfigFields(){
   // Setup page loads - no manual config needed, Firebase auto-connects
 }
 
-var STOCK_CATALOG = [
+var DEFAULT_STOCK_CATALOG = [
   { category:'Building Materials', products:['Cement','Sariya','Gate'] },
   { category:'Taar Fencing', products:['Jaali','Katila Taar'] },
   { category:'Steel', products:['Almirah','Bilda','Peti','Diwan Peti'] },
@@ -752,7 +773,75 @@ var STOCK_CATALOG = [
   { category:'Plastic Water Tank', products:['Vectus'] }
 ];
 
-var stockOpenCategory = STOCK_CATALOG[0].category;
+function normalizeCatalog(raw){
+  var src = [];
+  if(Array.isArray(raw)) src = raw;
+  else if(raw && typeof raw==='object') src = Object.keys(raw).map(function(k){ return raw[k]; });
+
+  var seenCat = {};
+  var out = [];
+  src.forEach(function(g){
+    var cat = String(g && g.category || '').trim();
+    if(!cat) return;
+    if(seenCat[cat.toLowerCase()]) return;
+    seenCat[cat.toLowerCase()] = true;
+
+    var products = Array.isArray(g && g.products) ? g.products : [];
+    var seenProd = {};
+    var normProd = [];
+    products.forEach(function(p){
+      var name = String(p||'').trim();
+      if(!name) return;
+      var k = name.toLowerCase();
+      if(seenProd[k]) return;
+      seenProd[k] = true;
+      normProd.push(name);
+    });
+
+    out.push({ category: cat, products: normProd });
+  });
+  return out;
+}
+
+function getSavedStockCatalog(){
+  try {
+    return normalizeCatalog(JSON.parse(localStorage.getItem('sh_stock_catalog')||'null'));
+  } catch(e){
+    return [];
+  }
+}
+
+function saveStockCatalog(catalog){
+  localStorage.setItem('sh_stock_catalog', JSON.stringify(normalizeCatalog(catalog)));
+}
+
+function loadStockCatalog(){
+  var saved = getSavedStockCatalog();
+  if(saved.length) return saved;
+  return normalizeCatalog(DEFAULT_STOCK_CATALOG);
+}
+
+function catalogSignature(catalog){
+  return JSON.stringify(normalizeCatalog(catalog).map(function(g){
+    return {
+      category: g.category,
+      products: (g.products||[]).slice().sort(function(a,b){ return a.localeCompare(b); })
+    };
+  }).sort(function(a,b){ return a.category.localeCompare(b.category); }));
+}
+
+function syncStockCatalog(){
+  saveStockCatalog(STOCK_CATALOG);
+  if(!useFirebase || !fbRef || isCatalogPushInProgress) return;
+  isCatalogPushInProgress = true;
+  fbRef.child('stockCatalog').set(normalizeCatalog(STOCK_CATALOG), function(){
+    isCatalogPushInProgress = false;
+  });
+}
+
+var STOCK_CATALOG = loadStockCatalog();
+
+var stockOpenCategory = (STOCK_CATALOG[0] && STOCK_CATALOG[0].category) || '';
 
 function stockKey(category, name){
   return String(category||'').trim().toLowerCase()+'|'+String(name||'').trim().toLowerCase();
@@ -797,9 +886,12 @@ function sameStockShape(a, b){
 function renderStockCategoryOptions(){
   var sel = document.getElementById('s-category');
   if(!sel) return;
+  var prev = sel.value;
   sel.innerHTML = STOCK_CATALOG.map(function(c){
     return '<option value="'+c.category+'">'+c.category+'</option>';
   }).join('');
+  if(prev && STOCK_CATALOG.some(function(c){ return c.category===prev; })) sel.value = prev;
+  else if(STOCK_CATALOG[0]) sel.value = STOCK_CATALOG[0].category;
 }
 
 function renderStockProductOptions(category){
@@ -810,7 +902,7 @@ function renderStockProductOptions(category){
 }
 
 function onStockCategoryChange(){
-  var cat = document.getElementById('s-category').value;
+  var cat = document.getElementById('s-category').value || (STOCK_CATALOG[0] && STOCK_CATALOG[0].category) || '';
   renderStockProductOptions(cat);
 }
 
@@ -828,6 +920,77 @@ function seedStockCatalog(){
   liveData.stock = seeded;
   localStorage.setItem('sh_seeded_catalog_v3','1');
   localStorage.setItem('sh_seeded_catalog_v4','1');
+  syncStockCatalog();
+}
+
+function addStockCategory(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  var input = document.getElementById('s-new-category');
+  var raw = String(input.value||'').trim();
+  if(!raw){ toast('\u274C Enter category name'); return; }
+
+  var exists = STOCK_CATALOG.some(function(g){ return g.category.toLowerCase()===raw.toLowerCase(); });
+  if(exists){ toast('\u26A0\uFE0F Category already exists'); return; }
+
+  STOCK_CATALOG.push({ category: raw, products: [] });
+  saveStockCatalog(STOCK_CATALOG);
+  syncStockCatalog();
+  renderStockCategoryOptions();
+  document.getElementById('s-category').value = raw;
+  onStockCategoryChange();
+  stockOpenCategory = raw;
+  renderStock();
+  input.value = '';
+  toast('\u2705 Category added');
+}
+
+function addStockProduct(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  var category = document.getElementById('s-category').value;
+  var input = document.getElementById('s-new-product');
+  var raw = String(input.value||'').trim();
+  if(!category){ toast('\u274C Select category'); return; }
+  if(!raw){ toast('\u274C Enter product name'); return; }
+
+  var group = STOCK_CATALOG.find(function(g){ return g.category===category; });
+  if(!group){ toast('\u274C Category not found'); return; }
+  if(group.products.some(function(p){ return p.toLowerCase()===raw.toLowerCase(); })){
+    toast('\u26A0\uFE0F Product already exists in this category');
+    return;
+  }
+
+  group.products.push(raw);
+  saveStockCatalog(STOCK_CATALOG);
+  syncStockCatalog();
+  renderStockProductOptions(category);
+  document.getElementById('s-name').value = raw;
+  stockOpenCategory = category;
+  input.value = '';
+
+  var existing = getStock().find(function(x){
+    return (x.category||'')===category && (x.name||'').toLowerCase()===raw.toLowerCase();
+  });
+  if(existing){
+    renderStock();
+    toast('\u2705 Product added');
+    return;
+  }
+
+  pushData('stock', {
+    id: Date.now(),
+    category: category,
+    name: raw,
+    qty: 0,
+    unit: 'pcs',
+    cost: 0,
+    userId: currentUserId,
+    userName: currentUserName,
+    editTime: new Date().toLocaleString()
+  }, function(){
+    renderStock();
+    refreshBikriStockOptions();
+    toast('\u2705 Product added');
+  });
 }
 
 // ── Stock ──────────────────────────────────────────────
