@@ -218,9 +218,9 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
   <div class="card">
     <h3>&#128230; Add / Update Product Stock</h3>
     <label>Category</label>
-    <select id="s-category"></select>
+    <select id="s-category" onchange="onStockCategoryChange()"></select>
     <label>Product Name</label>
-    <input type="text" id="s-name" placeholder="e.g. 1 inch pipe"/>
+    <select id="s-name"></select>
     <label>Quantity</label>
     <input type="number" id="s-qty" placeholder="e.g. 50" min="0"/>
     <label>Unit</label>
@@ -476,6 +476,7 @@ var fbRef = null;
 var useFirebase = false;
 var liveData = { bikri: [], kharcha: [], udhaar: [], stock: [] };
 var isRecoveryWriteInProgress = false;
+var isStockCatalogSyncInProgress = false;
 
 // Hardcoded Firebase config (pre-filled for easy setup)
 var HARDCODED_CONFIG = {
@@ -582,6 +583,10 @@ function listenFirebase(){
       stock: mergeKeepingLocal(remoteData.stock, localData.stock)
     };
 
+    var normalizedStock = normalizeStockToCatalog(mergedData.stock);
+    var stockShapeChanged = !sameStockShape(mergedData.stock, normalizedStock);
+    mergedData.stock = normalizedStock;
+
     var remoteCount = countEntries(remoteData);
     var mergedCount = countEntries(mergedData);
     var hadLocalOnlyRecords = mergedCount > remoteCount;
@@ -610,6 +615,13 @@ function listenFirebase(){
         } else {
           toast('\u2705 Local backup entries restored to cloud');
         }
+      });
+    }
+
+    if(!hadLocalOnlyRecords && stockShapeChanged && !isStockCatalogSyncInProgress){
+      isStockCatalogSyncInProgress = true;
+      fbRef.child('stock').set(toFirebaseObject(mergedData.stock), function(){
+        isStockCatalogSyncInProgress = false;
       });
     }
 
@@ -740,6 +752,48 @@ var STOCK_CATALOG = [
   { category:'Plastic Water Tank', products:['Vectus'] }
 ];
 
+var stockOpenCategory = STOCK_CATALOG[0].category;
+
+function stockKey(category, name){
+  return String(category||'').trim().toLowerCase()+'|'+String(name||'').trim().toLowerCase();
+}
+
+function normalizeStockToCatalog(arr){
+  var map = {};
+  (arr||[]).forEach(function(s){
+    map[stockKey(s.category, s.name)] = s;
+  });
+
+  var out = [];
+  var base = Date.now();
+  var idx = 0;
+  STOCK_CATALOG.forEach(function(group){
+    group.products.forEach(function(p){
+      var old = map[stockKey(group.category, p)] || {};
+      out.push({
+        id: old.id || (base + idx++),
+        category: group.category,
+        name: p,
+        qty: Number(old.qty||0),
+        unit: old.unit || 'pcs',
+        cost: Number(old.cost||0),
+        userId: old.userId || currentUserId || 'system',
+        userName: old.userName || currentUserName || 'System',
+        editTime: old.editTime || new Date().toLocaleString()
+      });
+    });
+  });
+  return out;
+}
+
+function sameStockShape(a, b){
+  if((a||[]).length !== (b||[]).length) return false;
+  var A = (a||[]).map(function(x){ return stockKey(x.category, x.name); }).sort();
+  var B = (b||[]).map(function(x){ return stockKey(x.category, x.name); }).sort();
+  for(var i=0;i<A.length;i++){ if(A[i]!==B[i]) return false; }
+  return true;
+}
+
 function renderStockCategoryOptions(){
   var sel = document.getElementById('s-category');
   if(!sel) return;
@@ -748,31 +802,32 @@ function renderStockCategoryOptions(){
   }).join('');
 }
 
-function seedStockCatalog(){
-  if(localStorage.getItem('sh_seeded_catalog_v3')==='1') return;
+function renderStockProductOptions(category){
+  var sel = document.getElementById('s-name');
+  if(!sel) return;
+  var g = STOCK_CATALOG.find(function(x){ return x.category===category; }) || STOCK_CATALOG[0];
+  sel.innerHTML = (g.products||[]).map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
+}
 
-  var seeded = [];
-  var base = Date.now();
-  var idx = 0;
-  STOCK_CATALOG.forEach(function(group){
-    group.products.forEach(function(name){
-      seeded.push({
-        id: base + idx++,
-        category: group.category,
-        name: name,
-        qty: 0,
-        unit: 'pcs',
-        cost: 0,
-        userId: currentUserId || 'system',
-        userName: currentUserName || 'System',
-        editTime: new Date().toLocaleString()
-      });
-    });
-  });
+function onStockCategoryChange(){
+  var cat = document.getElementById('s-category').value;
+  renderStockProductOptions(cat);
+}
+
+function toggleStockCategory(category){
+  stockOpenCategory = stockOpenCategory===category ? '' : category;
+  renderStock();
+}
+
+function seedStockCatalog(){
+  if(localStorage.getItem('sh_seeded_catalog_v4')==='1') return;
+
+  var seeded = normalizeStockToCatalog(LOCAL.getStock());
 
   LOCAL.setStock(seeded);
   liveData.stock = seeded;
   localStorage.setItem('sh_seeded_catalog_v3','1');
+  localStorage.setItem('sh_seeded_catalog_v4','1');
 }
 
 // ── Stock ──────────────────────────────────────────────
@@ -784,7 +839,7 @@ function addOrUpdateStock(){
   var unit = document.getElementById('s-unit').value;
   var cost = parseFloat(document.getElementById('s-cost').value||0);
   if(!category){ toast('\u274C Select category'); return; }
-  if(!name){ toast('\u274C Enter product name'); return; }
+  if(!name){ toast('\u274C Select product'); return; }
   if(isNaN(qty) || qty<0){ toast('\u274C Enter valid quantity'); return; }
 
   var all = getStock();
@@ -821,31 +876,41 @@ function addOrUpdateStock(){
     });
   }
 
-  document.getElementById('s-name').value='';
+  onStockCategoryChange();
   document.getElementById('s-qty').value='';
   document.getElementById('s-cost').value='';
 }
 
 function renderStock(){
-  var all = getStock().slice().sort(function(a,b){
-    var c = (a.category||'').localeCompare(b.category||'');
-    return c!==0 ? c : (a.name||'').localeCompare(b.name||'');
-  });
+  var all = normalizeStockToCatalog(getStock());
   var el = document.getElementById('stock-list');
   if(!el) return;
   if(!all.length){ el.innerHTML='<div class="empty">No stock items yet.</div>'; return; }
 
-  el.innerHTML = all.map(function(s){
-    var qtyNum = Number(s.qty||0);
-    var qtyClass = qtyNum<=5 ? 'badge-red' : 'badge-green';
-    return '<div class="list-item"><div class="li-top"><div>'+
-      '<div class="li-name">'+(s.name||'Product')+'</div>'+
-      '<div class="li-sub"><span class="badge badge-blue">'+(s.category||'Uncategorized')+'</span></div>'+
-      '<div class="li-sub">Cost: '+rs(s.cost||0)+' / '+(s.unit||'pcs')+'<br><small style="color:#999;font-size:11px">By '+(s.userName||'Unknown')+' ('+(s.editTime||'')+')</small></div>'+
-      '</div><div style="text-align:right">'+
-      '<div class="li-amt"><span class="badge '+qtyClass+'">'+qtyNum+' '+(s.unit||'pcs')+'</span></div>'+
-      '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="fillStockForm('+s.id+')">Edit</button>'+
-      '</div></div></div>';
+  var byKey = {};
+  all.forEach(function(s){ byKey[stockKey(s.category, s.name)] = s; });
+
+  el.innerHTML = STOCK_CATALOG.map(function(group){
+    var isOpen = stockOpenCategory===group.category;
+    var body = group.products.map(function(name){
+      var s = byKey[stockKey(group.category, name)] || {category:group.category,name:name,qty:0,unit:'pcs',cost:0,id:0};
+      var qtyNum = Number(s.qty||0);
+      var qtyClass = qtyNum<=5 ? 'badge-red' : 'badge-green';
+      return '<div class="list-item"><div class="li-top"><div>'+
+        '<div class="li-name">'+name+'</div>'+
+        '<div class="li-sub">Cost: '+rs(s.cost||0)+' / '+(s.unit||'pcs')+'<br><small style="color:#999;font-size:11px">By '+(s.userName||'Unknown')+' ('+(s.editTime||'')+')</small></div>'+
+        '</div><div style="text-align:right">'+
+        '<div class="li-amt"><span class="badge '+qtyClass+'">'+qtyNum+' '+(s.unit||'pcs')+'</span></div>'+
+        '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="fillStockForm('+s.id+')">Edit</button>'+
+        '</div></div></div>';
+    }).join('');
+
+    return '<div class="card" style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStockCategory(\''+group.category+'\')">'+
+      '<h3 style="margin-bottom:0;color:#1565c0">'+group.category+'</h3>'+
+      '<span class="badge badge-blue">'+(isOpen?'Hide':'Show')+'</span></div>'+
+      (isOpen?('<div style="margin-top:10px">'+body+'</div>'):'')+
+      '</div>';
   }).join('');
 
   refreshBikriStockOptions();
@@ -856,6 +921,7 @@ function fillStockForm(id){
   if(!s) return;
   showPage('stock');
   document.getElementById('s-category').value = s.category || STOCK_CATALOG[0].category;
+  onStockCategoryChange();
   document.getElementById('s-name').value = s.name || '';
   document.getElementById('s-qty').value = s.qty || 0;
   document.getElementById('s-unit').value = s.unit || 'pcs';
@@ -1447,6 +1513,7 @@ liveData.udhaar  = LOCAL.getUdhaar();
 liveData.stock   = LOCAL.getStock();
 
 renderStockCategoryOptions();
+onStockCategoryChange();
 seedStockCatalog();
 
 checkLogin();
