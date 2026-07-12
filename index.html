@@ -884,6 +884,7 @@ function addBikri(){
       mode:payMode,
       platform:plat,
       account:acc,
+      soldStockId:stockId,
       soldProduct:soldProduct,
       soldQty:stockId ? soldQty : 0,
       soldUnit:soldUnit,
@@ -1187,6 +1188,65 @@ function saveTxnEdit(){
   }
 }
 
+function deleteTxn(type,id,fbKey){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  if(!confirm('Delete this entry?')) return;
+
+  if(type==='bikri'){
+    var rowB = getBikri().find(function(x){ return x.id===id; });
+    if(!rowB){ toast('\u274C Transaction not found'); return; }
+
+    var doDeleteBikri = function(){
+      deleteData('bikri', fbKey || rowB.fbKey || null, id, function(){
+        toast('\u2705 Sale deleted by '+currentUserName+'!');
+        renderDashboard();
+        renderHistory();
+        renderStock();
+        refreshBikriStockOptions();
+      });
+    };
+
+    var soldQty = Number(rowB.soldQty||0);
+    if(soldQty>0){
+      var stocks = getStock();
+      var target = null;
+
+      if(rowB.soldStockId!==undefined && rowB.soldStockId!==null){
+        target = stocks.find(function(s){ return String(s.id)===String(rowB.soldStockId); }) || null;
+      }
+      if(!target && rowB.soldProduct){
+        target = stocks.find(function(s){
+          return (s.name||'').toLowerCase()===(rowB.soldProduct||'').toLowerCase() &&
+            (!rowB.soldUnit || (s.unit||'')===(rowB.soldUnit||''));
+        }) || null;
+      }
+
+      if(target){
+        var updatedStock = JSON.parse(JSON.stringify(target));
+        updatedStock.qty = Number(updatedStock.qty||0) + soldQty;
+        updatedStock.userId = currentUserId;
+        updatedStock.userName = currentUserName;
+        updatedStock.editTime = new Date().toLocaleString();
+        updateData('stock', target.fbKey, target.id, updatedStock, function(){
+          doDeleteBikri();
+        });
+        return;
+      }
+    }
+
+    doDeleteBikri();
+    return;
+  }
+
+  var rowK = getKharcha().find(function(x){ return x.id===id; });
+  if(!rowK){ toast('\u274C Transaction not found'); return; }
+  deleteData('kharcha', fbKey || rowK.fbKey || null, id, function(){
+    toast('\u2705 Kharcha deleted by '+currentUserName+'!');
+    renderDashboard();
+    renderHistory();
+  });
+}
+
 // ── Dashboard ───────────────────────────────────────────
 function setDashToday(){ document.getElementById('dash-date').value=todayStr(); renderDashboard(); }
 
@@ -1238,13 +1298,19 @@ function renderDashboard(){
         '<div class="li-name" style="color:#2e7d32">\u2705 '+(x.desc||'Sale')+'</div>'+
         '<div class="li-sub">'+tag+stockLine+'<br><small style="color:#999;font-size:11px;margin-top:3px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
         '<div style="text-align:right"><div class="li-amt val-green">+'+rs(x.amt)+'</div>'+
-        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="openTxnModal(\'bikri\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button></div></div></div>';
+        '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">'+
+        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-bottom:0" onclick="openTxnModal(\'bikri\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button>'+
+        '<button class="btn btn-red" style="width:auto;padding:6px 10px;font-size:12px;margin-bottom:0" onclick="deleteTxn(\'bikri\','+x.id+',\''+(x.fbKey||'')+'\')">Delete</button>'+
+        '</div></div></div></div>';
     } else {
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name" style="color:#b71c1c">\uD83D\uDCB8 '+(x.desc||'Kharcha')+'</div>'+
         '<div class="li-sub"><small style="color:#999;font-size:11px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
         '<div style="text-align:right"><div class="li-amt val-red">-'+rs(x.amt)+'</div>'+
-        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="openTxnModal(\'kharcha\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button></div></div></div>';
+        '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">'+
+        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-bottom:0" onclick="openTxnModal(\'kharcha\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button>'+
+        '<button class="btn btn-red" style="width:auto;padding:6px 10px;font-size:12px;margin-bottom:0" onclick="deleteTxn(\'kharcha\','+x.id+',\''+(x.fbKey||'')+'\')">Delete</button>'+
+        '</div></div></div></div>';
     }
   }).join('');
 }
