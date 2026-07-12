@@ -101,6 +101,7 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 <div class="tabs">
   <div class="tab active" onclick="showPage('dashboard')">&#128202; Dashboard</div>
   <div class="tab" onclick="showPage('entry')">&#10133; Entry</div>
+  <div class="tab" onclick="showPage('stock')">&#128230; Stock</div>
   <div class="tab" onclick="showPage('credit')">&#128218; Udhaar</div>
   <div class="tab" onclick="showPage('history')">&#128197; History</div>
   <div class="tab" onclick="showPage('setup')">&#9881; Setup</div>
@@ -171,6 +172,13 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
     <input type="number" id="b-amount" placeholder="e.g. 500" min="0"/>
     <label>Description (optional)</label>
     <input type="text" id="b-desc" placeholder="e.g. Nails, Bolts, Pipe..."/>
+    <label>Sold From Stock (optional)</label>
+    <select id="b-stock-id" onchange="onBikriStockChange()">
+      <option value="">-- Not from stock --</option>
+    </select>
+    <label id="b-stock-qty-label" style="display:none">Quantity Sold</label>
+    <input type="number" id="b-stock-qty" placeholder="e.g. 2" min="0" style="display:none"/>
+    <div id="b-stock-hint" class="li-sub" style="display:none;margin-bottom:8px"></div>
     <label>Payment Received Via</label>
     <div class="pay-mode">
       <div class="pay-btn selected" id="pm-cash" onclick="selectPayMode('cash')">&#128181; Cash</div>
@@ -202,6 +210,32 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
     <label>Date</label>
     <input type="date" id="k-date"/>
     <button class="btn btn-red" onclick="addKharcha()">&#128190; Save Kharcha</button>
+  </div>
+</div>
+
+<!-- STOCK -->
+<div id="page-stock" class="page">
+  <div class="card">
+    <h3>&#128230; Add / Update Product Stock</h3>
+    <label>Product Name</label>
+    <input type="text" id="s-name" placeholder="e.g. 1 inch pipe"/>
+    <label>Quantity</label>
+    <input type="number" id="s-qty" placeholder="e.g. 50" min="0"/>
+    <label>Unit</label>
+    <select id="s-unit">
+      <option value="pcs">Pieces</option>
+      <option value="kg">Kg</option>
+      <option value="box">Box</option>
+      <option value="meter">Meter</option>
+      <option value="other">Other</option>
+    </select>
+    <label>Cost Per Unit (optional)</label>
+    <input type="number" id="s-cost" placeholder="e.g. 120" min="0"/>
+    <button class="btn btn-blue" onclick="addOrUpdateStock()">&#128190; Save Stock</button>
+  </div>
+  <div class="card">
+    <h3>&#128203; Current Stock</h3>
+    <div id="stock-list"><div class="empty">No stock items yet.</div></div>
   </div>
 </div>
 
@@ -286,6 +320,69 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
   </div>
 </div>
 
+<!-- Edit Transaction Modal -->
+<div class="modal-overlay" id="txn-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeTxnModal()">&#x2715;</button>
+    <h3>&#9998; Edit Transaction</h3>
+    <input type="hidden" id="tx-type"/>
+    <input type="hidden" id="tx-id"/>
+    <input type="hidden" id="tx-fbkey"/>
+    <label>Amount (&#8377;)</label>
+    <input type="number" id="tx-amount" min="0"/>
+    <label>Description</label>
+    <input type="text" id="tx-desc" placeholder="Description"/>
+    <label>Date</label>
+    <input type="date" id="tx-date"/>
+    <div id="tx-bikri-fields" style="display:none">
+      <label>Payment Via</label>
+      <div class="pay-mode">
+        <div class="pay-btn selected" id="tx-pm-cash" onclick="selectEditPayMode('cash')">&#128181; Cash</div>
+        <div class="pay-btn" id="tx-pm-online" onclick="selectEditPayMode('online')">&#128241; Online</div>
+      </div>
+      <div id="tx-online-fields" style="display:none">
+        <label>Platform</label>
+        <select id="tx-platform">
+          <option value="">-- Select --</option>
+          <option>PhonePe</option>
+          <option>Google Pay (GPay)</option>
+          <option>Paytm</option>
+          <option>Bank Transfer (NEFT/IMPS)</option>
+          <option>Other</option>
+        </select>
+        <label>Account Name / Number (optional)</label>
+        <input type="text" id="tx-account" placeholder="e.g. SBI - 9876543210"/>
+      </div>
+    </div>
+    <button class="btn btn-blue" onclick="saveTxnEdit()">&#128190; Save Changes</button>
+    <button class="btn btn-gray" onclick="closeTxnModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Edit Udhaar Modal -->
+<div class="modal-overlay" id="udhaar-edit-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeUdhaarEditModal()">&#x2715;</button>
+    <h3>&#9998; Edit Udhaar</h3>
+    <input type="hidden" id="ue-id"/>
+    <input type="hidden" id="ue-fbkey"/>
+    <label>Customer Name</label>
+    <input type="text" id="ue-name"/>
+    <label>Mobile Number</label>
+    <input type="tel" id="ue-phone" maxlength="10"/>
+    <label>Udhaar Amount (&#8377;)</label>
+    <input type="number" id="ue-amt" min="0"/>
+    <label>Remaining Amount (&#8377;)</label>
+    <input type="number" id="ue-rem" min="0"/>
+    <label>Description</label>
+    <input type="text" id="ue-desc"/>
+    <label>Date</label>
+    <input type="date" id="ue-date"/>
+    <button class="btn btn-blue" onclick="saveUdhaarEdit()">&#128190; Save Changes</button>
+    <button class="btn btn-gray" onclick="closeUdhaarEditModal()">Cancel</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- Firebase SDK -->
@@ -298,9 +395,11 @@ var LOCAL = {
   getBikri:   function(){ return JSON.parse(localStorage.getItem('sh_bikri')||'[]'); },
   getKharcha: function(){ return JSON.parse(localStorage.getItem('sh_kharcha')||'[]'); },
   getUdhaar:  function(){ return JSON.parse(localStorage.getItem('sh_udhaar')||'[]'); },
+  getStock:   function(){ return JSON.parse(localStorage.getItem('sh_stock')||'[]'); },
   setBikri:   function(v){ localStorage.setItem('sh_bikri',JSON.stringify(v)); },
   setKharcha: function(v){ localStorage.setItem('sh_kharcha',JSON.stringify(v)); },
-  setUdhaar:  function(v){ localStorage.setItem('sh_udhaar',JSON.stringify(v)); }
+  setUdhaar:  function(v){ localStorage.setItem('sh_udhaar',JSON.stringify(v)); },
+  setStock:   function(v){ localStorage.setItem('sh_stock',JSON.stringify(v)); }
 };
 
 // ── User session management ─────────────────────────────
@@ -373,7 +472,8 @@ function checkLogin(){
 var db = null;
 var fbRef = null;
 var useFirebase = false;
-var liveData = { bikri: [], kharcha: [], udhaar: [] };
+var liveData = { bikri: [], kharcha: [], udhaar: [], stock: [] };
+var isRecoveryWriteInProgress = false;
 
 // Hardcoded Firebase config (pre-filled for easy setup)
 var HARDCODED_CONFIG = {
@@ -413,18 +513,107 @@ function initFirebase(cfg){
   }
 }
 
+function getEntryStableKey(x){
+  if(x && x.id!==undefined && x.id!==null) return String(x.id);
+  return [x && x.date || '', x && x.amt || 0, x && x.desc || '', x && x.name || '', x && x.phone || ''].join('|');
+}
+
+function mergeKeepingLocal(remoteArr, localArr){
+  var map = {};
+  (remoteArr || []).forEach(function(x){ map[getEntryStableKey(x)] = x; });
+  (localArr || []).forEach(function(x){
+    var k = getEntryStableKey(x);
+    if(!map[k]) map[k] = x;
+  });
+  return Object.keys(map).map(function(k){ return map[k]; });
+}
+
+function toFirebaseObject(arr){
+  var out = {};
+  (arr || []).forEach(function(x, idx){
+    var clean = JSON.parse(JSON.stringify(x || {}));
+    delete clean.fbKey;
+    var key = clean.id!==undefined && clean.id!==null ? String(clean.id) : ('k_'+Date.now()+'_'+idx);
+    out[key] = clean;
+  });
+  return out;
+}
+
+function countEntries(snapshot){
+  return (snapshot.bikri||[]).length + (snapshot.kharcha||[]).length + (snapshot.udhaar||[]).length + (snapshot.stock||[]).length;
+}
+
+function saveSafetyBackup(tag){
+  try {
+    localStorage.setItem('sh_last_backup', JSON.stringify({
+      tag: tag,
+      at: new Date().toISOString(),
+      bikri: LOCAL.getBikri(),
+      kharcha: LOCAL.getKharcha(),
+      udhaar: LOCAL.getUdhaar(),
+      stock: LOCAL.getStock()
+    }));
+  } catch(e){ }
+}
+
 function listenFirebase(){
   fbRef.on('value', function(snap){
     var d = snap.val() || {};
     var toArr = function(obj){ return obj ? Object.keys(obj).map(function(k){ return Object.assign({},obj[k],{fbKey:k}); }) : []; };
-    liveData.bikri   = toArr(d.bikri);
-    liveData.kharcha = toArr(d.kharcha);
-    liveData.udhaar  = toArr(d.udhaar);
-    LOCAL.setBikri(liveData.bikri);
-    LOCAL.setKharcha(liveData.kharcha);
-    LOCAL.setUdhaar(liveData.udhaar);
+    var remoteData = {
+      bikri: toArr(d.bikri),
+      kharcha: toArr(d.kharcha),
+      udhaar: toArr(d.udhaar),
+      stock: toArr(d.stock)
+    };
+    var localData = {
+      bikri: LOCAL.getBikri(),
+      kharcha: LOCAL.getKharcha(),
+      udhaar: LOCAL.getUdhaar(),
+      stock: LOCAL.getStock()
+    };
+
+    var mergedData = {
+      bikri: mergeKeepingLocal(remoteData.bikri, localData.bikri),
+      kharcha: mergeKeepingLocal(remoteData.kharcha, localData.kharcha),
+      udhaar: mergeKeepingLocal(remoteData.udhaar, localData.udhaar),
+      stock: mergeKeepingLocal(remoteData.stock, localData.stock)
+    };
+
+    var remoteCount = countEntries(remoteData);
+    var mergedCount = countEntries(mergedData);
+    var hadLocalOnlyRecords = mergedCount > remoteCount;
+
+    saveSafetyBackup('before_cloud_sync');
+    liveData.bikri   = mergedData.bikri;
+    liveData.kharcha = mergedData.kharcha;
+    liveData.udhaar  = mergedData.udhaar;
+    liveData.stock   = mergedData.stock;
+    LOCAL.setBikri(mergedData.bikri);
+    LOCAL.setKharcha(mergedData.kharcha);
+    LOCAL.setUdhaar(mergedData.udhaar);
+    LOCAL.setStock(mergedData.stock);
+
+    if(hadLocalOnlyRecords && !isRecoveryWriteInProgress){
+      isRecoveryWriteInProgress = true;
+      fbRef.set({
+        bikri: toFirebaseObject(mergedData.bikri),
+        kharcha: toFirebaseObject(mergedData.kharcha),
+        udhaar: toFirebaseObject(mergedData.udhaar),
+        stock: toFirebaseObject(mergedData.stock)
+      }, function(err){
+        isRecoveryWriteInProgress = false;
+        if(err){
+          toast('\u26A0\uFE0F Could not recover some local entries to cloud');
+        } else {
+          toast('\u2705 Local backup entries restored to cloud');
+        }
+      });
+    }
+
     renderDashboard();
     renderUdhaar();
+    renderStock();
   }, function(err){
     setSyncStatus(false);
     toast('\u26A0\uFE0F Sync error - using local data');
@@ -440,6 +629,7 @@ function setSyncStatus(ok){
 function getBikri()  { return useFirebase ? liveData.bikri   : LOCAL.getBikri();   }
 function getKharcha(){ return useFirebase ? liveData.kharcha : LOCAL.getKharcha(); }
 function getUdhaar() { return useFirebase ? liveData.udhaar  : LOCAL.getUdhaar();  }
+function getStock()  { return useFirebase ? liveData.stock   : LOCAL.getStock();   }
 
 function pushData(path, obj, cb){
   if(useFirebase){
@@ -451,8 +641,9 @@ function pushData(path, obj, cb){
     if(path==='bikri'){   var l=LOCAL.getBikri();   l.push(obj); LOCAL.setBikri(l);   }
     if(path==='kharcha'){ var l=LOCAL.getKharcha(); l.push(obj); LOCAL.setKharcha(l); }
     if(path==='udhaar'){  var l=LOCAL.getUdhaar();  l.push(obj); LOCAL.setUdhaar(l);  }
+    if(path==='stock'){   var l=LOCAL.getStock();   l.push(obj); LOCAL.setStock(l);   }
     if(cb) cb();
-    liveData[path] = path==='bikri'?LOCAL.getBikri():path==='kharcha'?LOCAL.getKharcha():LOCAL.getUdhaar();
+    liveData[path] = path==='bikri'?LOCAL.getBikri():path==='kharcha'?LOCAL.getKharcha():path==='udhaar'?LOCAL.getUdhaar():LOCAL.getStock();
   }
 }
 
@@ -463,10 +654,26 @@ function updateData(path, fbKey, id, obj, cb){
       else { if(cb) cb(); }
     });
   } else {
-    var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':'sh_udhaar';
+    var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':path==='udhaar'?'sh_udhaar':'sh_stock';
     var arr = JSON.parse(localStorage.getItem(key)||'[]');
     var idx = arr.findIndex(function(x){ return x.id===id; });
     if(idx>=0) arr[idx]=obj;
+    localStorage.setItem(key,JSON.stringify(arr));
+    liveData[path] = arr;
+    if(cb) cb();
+  }
+}
+
+function deleteData(path, fbKey, id, cb){
+  if(useFirebase && fbKey){
+    fbRef.child(path+'/'+fbKey).remove(function(err){
+      if(err){ toast('\u274C Delete failed: '+err.message); }
+      else { if(cb) cb(); }
+    });
+  } else {
+    var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':path==='udhaar'?'sh_udhaar':'sh_stock';
+    var arr = JSON.parse(localStorage.getItem(key)||'[]');
+    arr = arr.filter(function(x){ return x.id!==id; });
     localStorage.setItem(key,JSON.stringify(arr));
     liveData[path] = arr;
     if(cb) cb();
@@ -488,10 +695,11 @@ function showPage(name){
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
   document.getElementById('page-'+name).classList.add('active');
-  ['dashboard','entry','credit','history','setup'].forEach(function(n,i){
+  ['dashboard','entry','stock','credit','history','setup'].forEach(function(n,i){
     if(n===name) document.querySelectorAll('.tab')[i].classList.add('active');
   });
   if(name==='dashboard') renderDashboard();
+  if(name==='stock')     renderStock();
   if(name==='credit')    renderUdhaar();
   if(name==='history')   renderHistory();
   if(name==='setup')     loadConfigFields();
@@ -500,6 +708,128 @@ function showPage(name){
 // ── Setup ───────────────────────────────────────────────
 function loadConfigFields(){
   // Setup page loads - no manual config needed, Firebase auto-connects
+}
+
+// ── Stock ──────────────────────────────────────────────
+function addOrUpdateStock(){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  var name = document.getElementById('s-name').value.trim();
+  var qty = parseFloat(document.getElementById('s-qty').value);
+  var unit = document.getElementById('s-unit').value;
+  var cost = parseFloat(document.getElementById('s-cost').value||0);
+  if(!name){ toast('\u274C Enter product name'); return; }
+  if(isNaN(qty) || qty<0){ toast('\u274C Enter valid quantity'); return; }
+
+  var all = getStock();
+  var existing = all.find(function(x){ return (x.name||'').toLowerCase()===name.toLowerCase(); });
+  if(existing){
+    var updated = JSON.parse(JSON.stringify(existing));
+    updated.qty = qty;
+    updated.unit = unit;
+    updated.cost = cost;
+    updated.userId = currentUserId;
+    updated.userName = currentUserName;
+    updated.editTime = new Date().toLocaleString();
+    updateData('stock', existing.fbKey, existing.id, updated, function(){
+      toast('\u2705 Stock updated by '+currentUserName+'!');
+      renderStock();
+    });
+  } else {
+    pushData('stock', {
+      id: Date.now(),
+      name: name,
+      qty: qty,
+      unit: unit,
+      cost: cost,
+      userId: currentUserId,
+      userName: currentUserName,
+      editTime: new Date().toLocaleString()
+    }, function(){
+      toast('\u2705 Stock added by '+currentUserName+'!');
+      renderStock();
+    });
+  }
+
+  document.getElementById('s-name').value='';
+  document.getElementById('s-qty').value='';
+  document.getElementById('s-cost').value='';
+}
+
+function renderStock(){
+  var all = getStock().slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var el = document.getElementById('stock-list');
+  if(!el) return;
+  if(!all.length){ el.innerHTML='<div class="empty">No stock items yet.</div>'; return; }
+
+  el.innerHTML = all.map(function(s){
+    var qtyNum = Number(s.qty||0);
+    var qtyClass = qtyNum<=5 ? 'badge-red' : 'badge-green';
+    return '<div class="list-item"><div class="li-top"><div>'+
+      '<div class="li-name">'+(s.name||'Product')+'</div>'+
+      '<div class="li-sub">Cost: '+rs(s.cost||0)+' / '+(s.unit||'pcs')+'<br><small style="color:#999;font-size:11px">By '+(s.userName||'Unknown')+' ('+(s.editTime||'')+')</small></div>'+
+      '</div><div style="text-align:right">'+
+      '<div class="li-amt"><span class="badge '+qtyClass+'">'+qtyNum+' '+(s.unit||'pcs')+'</span></div>'+
+      '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="fillStockForm('+s.id+')">Edit</button>'+
+      '</div></div></div>';
+  }).join('');
+
+  refreshBikriStockOptions();
+}
+
+function fillStockForm(id){
+  var s = getStock().find(function(x){ return x.id===id; });
+  if(!s) return;
+  showPage('stock');
+  document.getElementById('s-name').value = s.name || '';
+  document.getElementById('s-qty').value = s.qty || 0;
+  document.getElementById('s-unit').value = s.unit || 'pcs';
+  document.getElementById('s-cost').value = s.cost || 0;
+}
+
+function refreshBikriStockOptions(){
+  var select = document.getElementById('b-stock-id');
+  if(!select) return;
+  var prev = select.value;
+  var items = getStock().slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var opts = ['<option value="">-- Not from stock --</option>'];
+  items.forEach(function(s){
+    var q = Number(s.qty||0);
+    opts.push('<option value="'+s.id+'">'+(s.name||'Product')+' (Stock: '+q+' '+(s.unit||'pcs')+')</option>');
+  });
+  select.innerHTML = opts.join('');
+  if(prev && items.some(function(s){ return String(s.id)===String(prev); })){
+    select.value = prev;
+  }
+  onBikriStockChange();
+}
+
+function onBikriStockChange(){
+  var select = document.getElementById('b-stock-id');
+  var qtyLabel = document.getElementById('b-stock-qty-label');
+  var qtyInput = document.getElementById('b-stock-qty');
+  var hint = document.getElementById('b-stock-hint');
+  if(!select || !qtyLabel || !qtyInput || !hint) return;
+
+  if(!select.value){
+    qtyLabel.style.display='none';
+    qtyInput.style.display='none';
+    hint.style.display='none';
+    qtyInput.value='';
+    qtyInput.removeAttribute('max');
+    return;
+  }
+
+  var id = parseInt(select.value,10);
+  var s = getStock().find(function(x){ return x.id===id; });
+  qtyLabel.style.display='block';
+  qtyInput.style.display='block';
+  if(s){
+    qtyInput.setAttribute('max', String(Number(s.qty||0)));
+    hint.style.display='block';
+    hint.textContent = 'Available stock: '+Number(s.qty||0)+' '+(s.unit||'pcs');
+  } else {
+    hint.style.display='none';
+  }
 }
 
 // ── Payment mode ────────────────────────────────────────
@@ -526,17 +856,66 @@ function addBikri(){
   var date = document.getElementById('b-date').value;
   var plat = payMode==='online'?(document.getElementById('b-platform').value||'Online'):'';
   var acc  = payMode==='online'?document.getElementById('b-account').value.trim():'';
+  var stockIdRaw = document.getElementById('b-stock-id').value;
+  var soldQty = parseFloat(document.getElementById('b-stock-qty').value||0);
+  var stockId = stockIdRaw ? parseInt(stockIdRaw,10) : null;
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
   if(!date){ toast('\u274C Select date'); return; }
   if(payMode==='online'&&!plat){ toast('\u274C Select payment platform'); return; }
-  var obj = {id:Date.now(),date:date,amt:amt,desc:desc,mode:payMode,platform:plat,account:acc,userId:currentUserId,userName:currentUserName,editTime:new Date().toLocaleString()};
-  pushData('bikri',obj,function(){
-    ['b-amount','b-desc','b-account'].forEach(function(i){ document.getElementById(i).value=''; });
-    document.getElementById('b-platform').value='';
-    selectPayMode('cash');
-    toast('\u2705 Sale saved by '+currentUserName+'!');
-    renderDashboard();
-  });
+
+  var soldProduct = '';
+  var soldUnit = '';
+  var stockItem = null;
+  if(stockId){
+    stockItem = getStock().find(function(x){ return x.id===stockId; });
+    if(!stockItem){ toast('\u274C Selected stock item not found'); return; }
+    if(!soldQty || soldQty<=0){ toast('\u274C Enter sold quantity'); return; }
+    if(soldQty > Number(stockItem.qty||0)){ toast('\u274C Sold quantity is more than stock'); return; }
+    soldProduct = stockItem.name || '';
+    soldUnit = stockItem.unit || 'pcs';
+  }
+
+  var saveSale = function(){
+    var obj = {
+      id:Date.now(),
+      date:date,
+      amt:amt,
+      desc:desc,
+      mode:payMode,
+      platform:plat,
+      account:acc,
+      soldProduct:soldProduct,
+      soldQty:stockId ? soldQty : 0,
+      soldUnit:soldUnit,
+      userId:currentUserId,
+      userName:currentUserName,
+      editTime:new Date().toLocaleString()
+    };
+    pushData('bikri',obj,function(){
+      ['b-amount','b-desc','b-account','b-stock-qty'].forEach(function(i){ document.getElementById(i).value=''; });
+      document.getElementById('b-platform').value='';
+      document.getElementById('b-stock-id').value='';
+      onBikriStockChange();
+      selectPayMode('cash');
+      toast('\u2705 Sale saved by '+currentUserName+'!');
+      renderDashboard();
+      refreshBikriStockOptions();
+    });
+  };
+
+  if(stockItem){
+    var updatedStock = JSON.parse(JSON.stringify(stockItem));
+    updatedStock.qty = Number(updatedStock.qty||0) - soldQty;
+    updatedStock.userId = currentUserId;
+    updatedStock.userName = currentUserName;
+    updatedStock.editTime = new Date().toLocaleString();
+    updateData('stock', stockItem.fbKey, stockItem.id, updatedStock, function(){
+      renderStock();
+      saveSale();
+    });
+  } else {
+    saveSale();
+  }
 }
 
 // ── Kharcha ─────────────────────────────────────────────
@@ -590,7 +969,9 @@ function renderUdhaar(){
         (u.remaining<u.amt?'<div class="li-sub" style="color:#e65100">Remaining: '+rs(u.remaining)+' of '+rs(u.amt)+'</div>':'')+
         '</div><div style="text-align:right">'+
         '<div class="li-amt val-orange">'+rs(u.remaining)+'</div>'+
+        '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0;margin-right:6px" onclick="openUdhaarEditModal('+u.id+',\''+(u.fbKey||'')+'\')">Edit</button>'+
         '<button class="btn btn-green" style="width:auto;padding:7px 12px;font-size:13px;margin-top:6px;margin-bottom:0" onclick="openReceiveModal('+u.id+',\''+u.fbKey+'\')">&#128176; Receive</button>'+
+        '<button class="btn btn-red" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0;margin-left:6px" onclick="deleteUdhaar('+u.id+',\''+(u.fbKey||'')+'\')">Delete</button>'+
         '</div></div></div>';
     }).join('');
   }
@@ -601,9 +982,79 @@ function renderUdhaar(){
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name">'+u.name+' <span class="badge badge-green">Cleared</span></div>'+
         '<div class="li-sub">\uD83D\uDCDE '+u.phone+' \u00B7 '+fmtDate(u.date)+(u.desc?' \u00B7 '+u.desc:'')+'<br><small style="color:#999;font-size:10px">Added by '+(u.userName||'Unknown')+'</small></div>'+
-        '</div><div class="li-amt val-green">'+rs(u.amt)+'</div></div></div>';
+        '</div><div style="text-align:right"><div class="li-amt val-green">'+rs(u.amt)+'</div>'+
+        '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="openUdhaarEditModal('+u.id+',\''+(u.fbKey||'')+'\')">Edit</button>'+
+        '<button class="btn btn-red" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0;margin-left:6px" onclick="deleteUdhaar('+u.id+',\''+(u.fbKey||'')+'\')">Delete</button>'+
+        '</div></div></div>';
     }).join('');
   }
+}
+
+function openUdhaarEditModal(id, fbKey){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  var u = getUdhaar().find(function(x){ return x.id===id; });
+  if(!u){ toast('\u274C Udhaar not found'); return; }
+  document.getElementById('ue-id').value = id;
+  document.getElementById('ue-fbkey').value = fbKey || '';
+  document.getElementById('ue-name').value = u.name || '';
+  document.getElementById('ue-phone').value = u.phone || '';
+  document.getElementById('ue-amt').value = u.amt || 0;
+  document.getElementById('ue-rem').value = u.remaining || 0;
+  document.getElementById('ue-desc').value = u.desc || '';
+  document.getElementById('ue-date').value = u.date || todayStr();
+  document.getElementById('udhaar-edit-modal').classList.add('open');
+}
+
+function closeUdhaarEditModal(){
+  document.getElementById('udhaar-edit-modal').classList.remove('open');
+}
+
+function saveUdhaarEdit(){
+  var id = parseInt(document.getElementById('ue-id').value,10);
+  var fbKey = document.getElementById('ue-fbkey').value || null;
+  var name = document.getElementById('ue-name').value.trim();
+  var phone = document.getElementById('ue-phone').value.trim();
+  var amt = parseFloat(document.getElementById('ue-amt').value);
+  var rem = parseFloat(document.getElementById('ue-rem').value);
+  var desc = document.getElementById('ue-desc').value.trim();
+  var date = document.getElementById('ue-date').value;
+
+  if(!name){ toast('\u274C Enter customer name'); return; }
+  if(!phone || phone.length<6){ toast('\u274C Enter valid mobile number'); return; }
+  if(!amt || amt<=0){ toast('\u274C Enter valid udhaar amount'); return; }
+  if(isNaN(rem) || rem<0 || rem>amt){ toast('\u274C Remaining must be between 0 and amount'); return; }
+  if(!date){ toast('\u274C Select date'); return; }
+
+  var row = getUdhaar().find(function(x){ return x.id===id; });
+  if(!row){ toast('\u274C Udhaar not found'); return; }
+  var updated = JSON.parse(JSON.stringify(row));
+  updated.name = name;
+  updated.phone = phone;
+  updated.amt = amt;
+  updated.remaining = rem;
+  updated.desc = desc;
+  updated.date = date;
+  updated.status = rem<=0 ? 'cleared' : 'pending';
+  updated.userId = currentUserId;
+  updated.userName = currentUserName;
+  updated.editTime = new Date().toLocaleString();
+
+  updateData('udhaar', fbKey || row.fbKey, id, updated, function(){
+    closeUdhaarEditModal();
+    toast('\u2705 Udhaar updated by '+currentUserName+'!');
+    renderUdhaar();
+    renderDashboard();
+  });
+}
+
+function deleteUdhaar(id, fbKey){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  if(!confirm('Delete this udhaar record?')) return;
+  deleteData('udhaar', fbKey || null, id, function(){
+    toast('\u2705 Udhaar deleted by '+currentUserName+'!');
+    renderUdhaar();
+    renderDashboard();
+  });
 }
 
 var currentUId=null, currentUFbKey=null;
@@ -644,6 +1095,96 @@ function receiveUdhaar(){
       renderDashboard();
     });
   });
+}
+
+// ── Edit Transactions ──────────────────────────────────
+var editPayMode = 'cash';
+function selectEditPayMode(m){
+  editPayMode = m;
+  document.getElementById('tx-pm-cash').classList.toggle('selected',m==='cash');
+  document.getElementById('tx-pm-online').classList.toggle('selected',m==='online');
+  document.getElementById('tx-online-fields').style.display = m==='online'?'block':'none';
+}
+
+function openTxnModal(type,id,fbKey){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  var row = type==='bikri'
+    ? getBikri().find(function(x){ return x.id===id; })
+    : getKharcha().find(function(x){ return x.id===id; });
+  if(!row){ toast('\u274C Transaction not found'); return; }
+
+  document.getElementById('tx-type').value = type;
+  document.getElementById('tx-id').value = id;
+  document.getElementById('tx-fbkey').value = fbKey || '';
+  document.getElementById('tx-amount').value = row.amt || 0;
+  document.getElementById('tx-desc').value = row.desc || '';
+  document.getElementById('tx-date').value = row.date || todayStr();
+
+  var bikriFields = document.getElementById('tx-bikri-fields');
+  if(type==='bikri'){
+    bikriFields.style.display = 'block';
+    document.getElementById('tx-platform').value = row.platform || '';
+    document.getElementById('tx-account').value = row.account || '';
+    selectEditPayMode(row.mode || 'cash');
+  } else {
+    bikriFields.style.display = 'none';
+    document.getElementById('tx-platform').value = '';
+    document.getElementById('tx-account').value = '';
+    selectEditPayMode('cash');
+  }
+  document.getElementById('txn-modal').classList.add('open');
+}
+
+function closeTxnModal(){
+  document.getElementById('txn-modal').classList.remove('open');
+}
+
+function saveTxnEdit(){
+  var type = document.getElementById('tx-type').value;
+  var id = parseInt(document.getElementById('tx-id').value,10);
+  var fbKey = document.getElementById('tx-fbkey').value || null;
+  var amt = parseFloat(document.getElementById('tx-amount').value);
+  var desc = document.getElementById('tx-desc').value.trim();
+  var date = document.getElementById('tx-date').value;
+  if(!amt || amt<=0){ toast('\u274C Enter valid amount'); return; }
+  if(!date){ toast('\u274C Select date'); return; }
+
+  if(type==='bikri'){
+    var rowB = getBikri().find(function(x){ return x.id===id; });
+    if(!rowB){ toast('\u274C Transaction not found'); return; }
+    var updatedB = JSON.parse(JSON.stringify(rowB));
+    updatedB.amt = amt;
+    updatedB.desc = desc;
+    updatedB.date = date;
+    updatedB.mode = editPayMode;
+    updatedB.platform = editPayMode==='online' ? (document.getElementById('tx-platform').value || 'Online') : '';
+    updatedB.account = editPayMode==='online' ? document.getElementById('tx-account').value.trim() : '';
+    updatedB.userId = currentUserId;
+    updatedB.userName = currentUserName;
+    updatedB.editTime = new Date().toLocaleString();
+    updateData('bikri', fbKey || rowB.fbKey, id, updatedB, function(){
+      closeTxnModal();
+      toast('\u2705 Sale updated by '+currentUserName+'!');
+      renderDashboard();
+      renderHistory();
+    });
+  } else {
+    var rowK = getKharcha().find(function(x){ return x.id===id; });
+    if(!rowK){ toast('\u274C Transaction not found'); return; }
+    var updatedK = JSON.parse(JSON.stringify(rowK));
+    updatedK.amt = amt;
+    updatedK.desc = desc;
+    updatedK.date = date;
+    updatedK.userId = currentUserId;
+    updatedK.userName = currentUserName;
+    updatedK.editTime = new Date().toLocaleString();
+    updateData('kharcha', fbKey || rowK.fbKey, id, updatedK, function(){
+      closeTxnModal();
+      toast('\u2705 Kharcha updated by '+currentUserName+'!');
+      renderDashboard();
+      renderHistory();
+    });
+  }
 }
 
 // ── Dashboard ───────────────────────────────────────────
@@ -690,15 +1231,20 @@ function renderDashboard(){
       var tag=x.mode==='cash'
         ?'<span class="badge badge-green">Cash</span>'
         :'<span class="badge badge-blue">'+(x.platform||'Online')+(x.account?' \u00B7 '+x.account:'')+'</span>';
+      var stockLine = x.soldProduct
+        ?'<br><small style="color:#6d4c41;font-size:11px">Product sold: '+x.soldProduct+' ('+Number(x.soldQty||0)+' '+(x.soldUnit||'pcs')+')</small>'
+        :'';
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name" style="color:#2e7d32">\u2705 '+(x.desc||'Sale')+'</div>'+
-        '<div class="li-sub">'+tag+'<br><small style="color:#999;font-size:11px;margin-top:3px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
-        '<div class="li-amt val-green">+'+rs(x.amt)+'</div></div></div>';
+        '<div class="li-sub">'+tag+stockLine+'<br><small style="color:#999;font-size:11px;margin-top:3px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
+        '<div style="text-align:right"><div class="li-amt val-green">+'+rs(x.amt)+'</div>'+
+        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="openTxnModal(\'bikri\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button></div></div></div>';
     } else {
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name" style="color:#b71c1c">\uD83D\uDCB8 '+(x.desc||'Kharcha')+'</div>'+
         '<div class="li-sub"><small style="color:#999;font-size:11px">By '+(x.userName||'Unknown')+' ('+(x.editTime||'')+')</small></div></div>'+
-        '<div class="li-amt val-red">-'+rs(x.amt)+'</div></div></div>';
+        '<div style="text-align:right"><div class="li-amt val-red">-'+rs(x.amt)+'</div>'+
+        '<button class="btn btn-gray" style="width:auto;padding:6px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="openTxnModal(\'kharcha\','+x.id+',\''+(x.fbKey||'')+'\')">Edit</button></div></div></div>';
     }
   }).join('');
 }
@@ -756,11 +1302,14 @@ document.getElementById('u-date').value    = todayStr();
 liveData.bikri   = LOCAL.getBikri();
 liveData.kharcha = LOCAL.getKharcha();
 liveData.udhaar  = LOCAL.getUdhaar();
+liveData.stock   = LOCAL.getStock();
 
 checkLogin();
 
 // Always initialize Firebase with hardcoded config (no manual setup needed)
 initFirebase(HARDCODED_CONFIG);
+
+refreshBikriStockOptions();
 </script>
 </body>
 </html>
