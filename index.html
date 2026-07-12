@@ -723,6 +723,75 @@ function loadConfigFields(){
   // Setup page loads - no manual config needed, Firebase auto-connects
 }
 
+function seedStockNamesFromList(){
+  if(localStorage.getItem('sh_seeded_names_v1')==='1') return;
+
+  var names = [
+    'तार',
+    'केबल तार',
+    'लग्गी',
+    'खुरपी',
+    'पेची',
+    'बांका',
+    'आरी',
+    'कटर प्लास',
+    'कटर फ्लैट',
+    'पाइप / एंगल स्टील',
+    'प्लास',
+    'हैमर',
+    'पलंग',
+    'नट',
+    'कूलर',
+    'LED TV',
+    'PVC पाइप',
+    'गेट',
+    'रॉड',
+    'सेविंग सेट',
+    'बोरिंग मशीन',
+    'ग्राइंड मशीन',
+    'रस्सी',
+    'वॉशिंग रॉड',
+    'फावड़ी',
+    'टेप फिटिंग',
+    'नट बोल्ट',
+    'शीट',
+    'सरिया'
+  ];
+
+  var list = LOCAL.getStock();
+  var exists = {};
+  list.forEach(function(s){
+    var k = (s.name||'').trim().toLowerCase();
+    if(k) exists[k]=1;
+  });
+
+  var now = Date.now();
+  var added = 0;
+  names.forEach(function(n, idx){
+    var k = n.toLowerCase();
+    if(!exists[k]){
+      list.push({
+        id: now + idx,
+        name: n,
+        qty: 0,
+        unit: 'pcs',
+        cost: 0,
+        userId: currentUserId || 'system',
+        userName: currentUserName || 'System',
+        editTime: new Date().toLocaleString()
+      });
+      exists[k]=1;
+      added++;
+    }
+  });
+
+  if(added>0){
+    LOCAL.setStock(list);
+    liveData.stock = list;
+  }
+  localStorage.setItem('sh_seeded_names_v1','1');
+}
+
 // ── Stock ──────────────────────────────────────────────
 function addOrUpdateStock(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
@@ -1382,6 +1451,8 @@ liveData.bikri   = LOCAL.getBikri();
 liveData.kharcha = LOCAL.getKharcha();
 liveData.udhaar  = LOCAL.getUdhaar();
 liveData.stock   = LOCAL.getStock();
+
+seedStockNamesFromList();
 
 checkLogin();
 
