@@ -217,6 +217,8 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 <div id="page-stock" class="page">
   <div class="card">
     <h3>&#128230; Add / Update Product Stock</h3>
+    <label>Category</label>
+    <select id="s-category"></select>
     <label>Product Name</label>
     <input type="text" id="s-name" placeholder="e.g. 1 inch pipe"/>
     <label>Quantity</label>
@@ -723,56 +725,41 @@ function loadConfigFields(){
   // Setup page loads - no manual config needed, Firebase auto-connects
 }
 
-function seedStockNamesFromList(){
-  if(localStorage.getItem('sh_seeded_names_v1')==='1') return;
+var STOCK_CATALOG = [
+  { category:'Building Materials', products:['Cement','Sariya','Gate'] },
+  { category:'Taar Fencing', products:['Jaali','Katila Taar'] },
+  { category:'Steel', products:['Almirah','Bilda','Peti','Diwan Peti'] },
+  { category:'Wooden Furniture', products:['Bed','Almirah','Dressing','Table','Mattress'] },
+  { category:'Plastic Furniture', products:['Chairs','Table','Stool'] },
+  { category:'PVC Pipes', products:['HDPE Pipes','Casing Pipes','Sprinkler Pipes'] },
+  { category:'Chaddar Steel', products:['Profile Chaddar','GC Chaddar'] },
+  { category:'MS Pipe Steel', products:['Angle'] },
+  { category:'Electronics', products:['Cooler','TV','Fridge','Washing Machine','Induction','Silai Machine'] },
+  { category:'Hardware Materials', products:['Screw','Nut-Bolts'] },
+  { category:'Tap Fittings', products:['PVC'] },
+  { category:'Plastic Water Tank', products:['Vectus'] }
+];
 
-  var names = [
-    'तार',
-    'केबल तार',
-    'लग्गी',
-    'खुरपी',
-    'पेची',
-    'बांका',
-    'आरी',
-    'कटर प्लास',
-    'कटर फ्लैट',
-    'पाइप / एंगल स्टील',
-    'प्लास',
-    'हैमर',
-    'पलंग',
-    'नट',
-    'कूलर',
-    'LED TV',
-    'PVC पाइप',
-    'गेट',
-    'रॉड',
-    'सेविंग सेट',
-    'बोरिंग मशीन',
-    'ग्राइंड मशीन',
-    'रस्सी',
-    'वॉशिंग रॉड',
-    'फावड़ी',
-    'टेप फिटिंग',
-    'नट बोल्ट',
-    'शीट',
-    'सरिया'
-  ];
+function renderStockCategoryOptions(){
+  var sel = document.getElementById('s-category');
+  if(!sel) return;
+  sel.innerHTML = STOCK_CATALOG.map(function(c){
+    return '<option value="'+c.category+'">'+c.category+'</option>';
+  }).join('');
+}
 
-  var list = LOCAL.getStock();
-  var exists = {};
-  list.forEach(function(s){
-    var k = (s.name||'').trim().toLowerCase();
-    if(k) exists[k]=1;
-  });
+function seedStockCatalog(){
+  if(localStorage.getItem('sh_seeded_catalog_v3')==='1') return;
 
-  var now = Date.now();
-  var added = 0;
-  names.forEach(function(n, idx){
-    var k = n.toLowerCase();
-    if(!exists[k]){
-      list.push({
-        id: now + idx,
-        name: n,
+  var seeded = [];
+  var base = Date.now();
+  var idx = 0;
+  STOCK_CATALOG.forEach(function(group){
+    group.products.forEach(function(name){
+      seeded.push({
+        id: base + idx++,
+        category: group.category,
+        name: name,
         qty: 0,
         unit: 'pcs',
         cost: 0,
@@ -780,32 +767,33 @@ function seedStockNamesFromList(){
         userName: currentUserName || 'System',
         editTime: new Date().toLocaleString()
       });
-      exists[k]=1;
-      added++;
-    }
+    });
   });
 
-  if(added>0){
-    LOCAL.setStock(list);
-    liveData.stock = list;
-  }
-  localStorage.setItem('sh_seeded_names_v1','1');
+  LOCAL.setStock(seeded);
+  liveData.stock = seeded;
+  localStorage.setItem('sh_seeded_catalog_v3','1');
 }
 
 // ── Stock ──────────────────────────────────────────────
 function addOrUpdateStock(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
+  var category = document.getElementById('s-category').value;
   var name = document.getElementById('s-name').value.trim();
   var qty = parseFloat(document.getElementById('s-qty').value);
   var unit = document.getElementById('s-unit').value;
   var cost = parseFloat(document.getElementById('s-cost').value||0);
+  if(!category){ toast('\u274C Select category'); return; }
   if(!name){ toast('\u274C Enter product name'); return; }
   if(isNaN(qty) || qty<0){ toast('\u274C Enter valid quantity'); return; }
 
   var all = getStock();
-  var existing = all.find(function(x){ return (x.name||'').toLowerCase()===name.toLowerCase(); });
+  var existing = all.find(function(x){
+    return (x.name||'').toLowerCase()===name.toLowerCase() && (x.category||'')===category;
+  });
   if(existing){
     var updated = JSON.parse(JSON.stringify(existing));
+    updated.category = category;
     updated.qty = qty;
     updated.unit = unit;
     updated.cost = cost;
@@ -819,6 +807,7 @@ function addOrUpdateStock(){
   } else {
     pushData('stock', {
       id: Date.now(),
+      category: category,
       name: name,
       qty: qty,
       unit: unit,
@@ -838,7 +827,10 @@ function addOrUpdateStock(){
 }
 
 function renderStock(){
-  var all = getStock().slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var all = getStock().slice().sort(function(a,b){
+    var c = (a.category||'').localeCompare(b.category||'');
+    return c!==0 ? c : (a.name||'').localeCompare(b.name||'');
+  });
   var el = document.getElementById('stock-list');
   if(!el) return;
   if(!all.length){ el.innerHTML='<div class="empty">No stock items yet.</div>'; return; }
@@ -848,6 +840,7 @@ function renderStock(){
     var qtyClass = qtyNum<=5 ? 'badge-red' : 'badge-green';
     return '<div class="list-item"><div class="li-top"><div>'+
       '<div class="li-name">'+(s.name||'Product')+'</div>'+
+      '<div class="li-sub"><span class="badge badge-blue">'+(s.category||'Uncategorized')+'</span></div>'+
       '<div class="li-sub">Cost: '+rs(s.cost||0)+' / '+(s.unit||'pcs')+'<br><small style="color:#999;font-size:11px">By '+(s.userName||'Unknown')+' ('+(s.editTime||'')+')</small></div>'+
       '</div><div style="text-align:right">'+
       '<div class="li-amt"><span class="badge '+qtyClass+'">'+qtyNum+' '+(s.unit||'pcs')+'</span></div>'+
@@ -862,6 +855,7 @@ function fillStockForm(id){
   var s = getStock().find(function(x){ return x.id===id; });
   if(!s) return;
   showPage('stock');
+  document.getElementById('s-category').value = s.category || STOCK_CATALOG[0].category;
   document.getElementById('s-name').value = s.name || '';
   document.getElementById('s-qty').value = s.qty || 0;
   document.getElementById('s-unit').value = s.unit || 'pcs';
@@ -876,7 +870,7 @@ function refreshBikriStockOptions(){
   var opts = ['<option value="">-- Not from stock --</option>'];
   items.forEach(function(s){
     var q = Number(s.qty||0);
-    opts.push('<option value="'+s.id+'">'+(s.name||'Product')+' (Stock: '+q+' '+(s.unit||'pcs')+')</option>');
+    opts.push('<option value="'+s.id+'">['+(s.category||'General')+'] '+(s.name||'Product')+' (Stock: '+q+' '+(s.unit||'pcs')+')</option>');
   });
   select.innerHTML = opts.join('');
   if(prev && items.some(function(s){ return String(s.id)===String(prev); })){
@@ -1452,7 +1446,8 @@ liveData.kharcha = LOCAL.getKharcha();
 liveData.udhaar  = LOCAL.getUdhaar();
 liveData.stock   = LOCAL.getStock();
 
-seedStockNamesFromList();
+renderStockCategoryOptions();
+seedStockCatalog();
 
 checkLogin();
 
