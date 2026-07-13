@@ -527,17 +527,29 @@ function getEntryStableKey(x){
 
 function mergeKeepingLocal(remoteArr, localArr){
   var map = {};
-  (remoteArr || []).forEach(function(x){ 
+  var remoteIds = {};
+  
+  // First, add all remote entries (Firebase is source of truth for synced data)
+  (remoteArr || []).forEach(function(x){
     // Skip if this entry was deleted locally
     if(liveData.deletedIds && liveData.deletedIds[x.id]) return;
-    map[getEntryStableKey(x)] = x; 
+    remoteIds[x.id] = true;
+    map[x.id] = x;
   });
+  
+  // Then, add local entries ONLY if they're completely new (not in remote at all)
+  // This prevents local cache from restoring entries deleted on other phones
   (localArr || []).forEach(function(x){
-    // Skip if this entry was deleted
+    // Skip if already in remote
+    if(remoteIds[x.id]) return;
+    // Skip if this entry was deleted locally
     if(liveData.deletedIds && liveData.deletedIds[x.id]) return;
-    var k = getEntryStableKey(x);
-    if(!map[k]) map[k] = x;
+    // Only keep if it's a new local entry (no fbKey means not synced yet)
+    if(!x.fbKey) {
+      map[x.id] = x;
+    }
   });
+  
   return Object.keys(map).map(function(k){ return map[k]; });
 }
 
