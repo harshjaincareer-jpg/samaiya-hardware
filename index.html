@@ -648,8 +648,9 @@ function listenFirebase(){
       });
     }
 
-    // Clear deleted IDs tracker after sync
-    liveData.deletedIds = {};
+    // Keep deletedIds persistent - don't clear them! This prevents deleted entries from re-appearing during sync.
+    // Deleted entries should stay deleted permanently.
+    localStorage.setItem('sh_deleted_ids', JSON.stringify(liveData.deletedIds));
 
     renderDashboard();
     renderUdhaar();
@@ -715,13 +716,15 @@ function deleteData(path, fbKey, id, cb){
     var prevArr = JSON.parse(localStorage.getItem(key)||'[]');
     var nextArr = prevArr.filter(function(x){ return x.id!==id; });
 
-    // Optimistic local delete prevents sync-merge from re-adding the deleted row.
+    // Optimistic local delete
     localStorage.setItem(key, JSON.stringify(nextArr));
     liveData[path] = nextArr;
 
-    fbRef.child(path+'/'+fbKey).remove(function(err){
+    // Force push the entire cleaned array to Firebase to ensure deletion is confirmed
+    var fbPath = path==='bikri'?'bikri':path==='kharcha'?'kharcha':path==='udhaar'?'udhaar':'stock';
+    fbRef.child(fbPath).set(toFirebaseObject(nextArr), function(err){
       if(err){
-        // Roll back local cache if cloud delete fails.
+        // Roll back if cloud update fails
         localStorage.setItem(key, JSON.stringify(prevArr));
         liveData[path] = prevArr;
         delete liveData.deletedIds[id];
@@ -729,13 +732,6 @@ function deleteData(path, fbKey, id, cb){
         toast('\u274C Delete failed: '+err.message);
       }
       else {
-        // Double-check the entry is gone
-        var verify = JSON.parse(localStorage.getItem(key)||'[]').filter(function(x){ return x.id===id; });
-        if(verify.length > 0){
-          var refiltered = JSON.parse(localStorage.getItem(key)||'[]').filter(function(x){ return x.id!==id; });
-          localStorage.setItem(key, JSON.stringify(refiltered));
-          liveData[path] = refiltered;
-        }
         if(cb) cb();
       }
     });
