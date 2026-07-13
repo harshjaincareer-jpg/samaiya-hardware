@@ -137,10 +137,7 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 
 <!-- DASHBOARD -->
 <div id="page-dashboard" class="page active">
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;margin-top:2px;">
-    <input type="date" id="dash-date" style="margin-bottom:0;flex:1;" onchange="renderDashboard()"/>
-    <button class="btn btn-gray" style="width:auto;padding:11px 14px;margin-bottom:0;" onclick="setDashToday()">Today</button>
-  </div>
+  <input type="date" id="dash-date" style="display:none;" />
   <div class="sum-row">
     <div class="sum-box"><div class="val val-red" id="d-kharcha">&#8377;0</div><div class="lbl">&#128184; Invested</div></div>
     <div class="sum-box"><div class="val val-green" id="d-bikri">&#8377;0</div><div class="lbl">&#10003; Received</div></div>
@@ -158,7 +155,7 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
     <div id="d-online-breakdown" style="margin-top:10px;"></div>
   </div>
   <div class="card">
-    <h3>&#128203; Entries for this day</h3>
+    <h3>&#128203; All Time Entries</h3>
     <div id="d-entries-list"><div class="empty">No entries yet.</div></div>
   </div>
 </div>
@@ -480,7 +477,7 @@ function checkLogin(){
 var db = null;
 var fbRef = null;
 var useFirebase = false;
-var liveData = { bikri: [], kharcha: [], udhaar: [], stock: [] };
+var liveData = { bikri: [], kharcha: [], udhaar: [], stock: [], deletedIds: {} };
 var isRecoveryWriteInProgress = false;
 var isStockCatalogSyncInProgress = false;
 var isCatalogPushInProgress = false;
@@ -530,8 +527,14 @@ function getEntryStableKey(x){
 
 function mergeKeepingLocal(remoteArr, localArr){
   var map = {};
-  (remoteArr || []).forEach(function(x){ map[getEntryStableKey(x)] = x; });
+  (remoteArr || []).forEach(function(x){ 
+    // Skip if this entry was deleted locally
+    if(liveData.deletedIds && liveData.deletedIds[x.id]) return;
+    map[getEntryStableKey(x)] = x; 
+  });
   (localArr || []).forEach(function(x){
+    // Skip if this entry was deleted
+    if(liveData.deletedIds && liveData.deletedIds[x.id]) return;
     var k = getEntryStableKey(x);
     if(!map[k]) map[k] = x;
   });
@@ -645,6 +648,9 @@ function listenFirebase(){
       });
     }
 
+    // Clear deleted IDs tracker after sync
+    liveData.deletedIds = {};
+
     renderDashboard();
     renderUdhaar();
     renderStock();
@@ -699,6 +705,11 @@ function updateData(path, fbKey, id, obj, cb){
 }
 
 function deleteData(path, fbKey, id, cb){
+  // Track deleted IDs to prevent sync from re-adding them
+  if(!liveData.deletedIds) liveData.deletedIds = {};
+  liveData.deletedIds[id] = true;
+  localStorage.setItem('sh_deleted_ids', JSON.stringify(liveData.deletedIds));
+  
   if(useFirebase && fbKey){
     var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':path==='udhaar'?'sh_udhaar':'sh_stock';
     var prevArr = JSON.parse(localStorage.getItem(key)||'[]');
@@ -713,9 +724,20 @@ function deleteData(path, fbKey, id, cb){
         // Roll back local cache if cloud delete fails.
         localStorage.setItem(key, JSON.stringify(prevArr));
         liveData[path] = prevArr;
+        delete liveData.deletedIds[id];
+        localStorage.setItem('sh_deleted_ids', JSON.stringify(liveData.deletedIds));
         toast('\u274C Delete failed: '+err.message);
       }
-      else { if(cb) cb(); }
+      else {
+        // Double-check the entry is gone
+        var verify = JSON.parse(localStorage.getItem(key)||'[]').filter(function(x){ return x.id===id; });
+        if(verify.length > 0){
+          var refiltered = JSON.parse(localStorage.getItem(key)||'[]').filter(function(x){ return x.id!==id; });
+          localStorage.setItem(key, JSON.stringify(refiltered));
+          liveData[path] = refiltered;
+        }
+        if(cb) cb();
+      }
     });
   } else {
     var key = path==='bikri'?'sh_bikri':path==='kharcha'?'sh_kharcha':path==='udhaar'?'sh_udhaar':'sh_stock';
@@ -1475,13 +1497,11 @@ function deleteTxn(type,id,fbKey){
 }
 
 // -- Dashboard -------------------------------------------
-function setDashToday(){ document.getElementById('dash-date').value=todayStr(); renderDashboard(); }
-
 function renderDashboard(){
-  var d = document.getElementById('dash-date').value||todayStr();
-  var bikri   = getBikri().filter(function(x){ return x.date===d; });
-  var kharcha = getKharcha().filter(function(x){ return x.date===d; });
-  var udhaar  = getUdhaar().filter(function(x){ return x.date===d; });
+  // Dashboard now shows ALL TIME data (not filtered by date)
+  var bikri   = getBikri().filter(function(x){ return x && x.id && x.amt!==undefined; });
+  var kharcha = getKharcha().filter(function(x){ return x && x.id && x.amt!==undefined; });
+  var udhaar  = getUdhaar().filter(function(x){ return x && x.id && x.amt!==undefined; });
   var tB=bikri.reduce(function(a,x){ return a+x.amt; },0);
   var tK=kharcha.reduce(function(a,x){ return a+x.amt; },0);
   var tU=udhaar.reduce(function(a,x){ return a+x.amt; },0);
@@ -1510,9 +1530,10 @@ function renderDashboard(){
 
   var all=bikri.map(function(x){ return Object.assign({},x,{type:'bikri'}); })
     .concat(kharcha.map(function(x){ return Object.assign({},x,{type:'kharcha'}); }))
-    .sort(function(a,b){ return b.id-a.id; });
+    .sort(function(a,b){ return b.id-a.id; })
+    .slice(0, 50); // Show last 50 entries
   var el=document.getElementById('d-entries-list');
-  if(!all.length){ el.innerHTML='<div class="empty">No entries for this date.</div>'; return; }
+  if(!all.length){ el.innerHTML='<div class="empty">No entries yet.</div>'; return; }
   el.innerHTML=all.map(function(x){
     if(x.type==='bikri'){
       var tag=x.mode==='cash'
@@ -1600,7 +1621,9 @@ function deleteSearchEntry(type, id, fbKey){
 
 // -- History ---------------------------------------------
 function renderHistory(){
-  var bikri=getBikri(), kharcha=getKharcha(), udhaar=getUdhaar();
+  var bikri=getBikri().filter(function(x){ return x && x.id && x.date && x.amt!==undefined; }), 
+      kharcha=getKharcha().filter(function(x){ return x && x.id && x.date && x.amt!==undefined; }), 
+      udhaar=getUdhaar().filter(function(x){ return x && x.id && x.date && x.amt!==undefined; });
   var ds={};
   bikri.forEach(function(x){ ds[x.date]=1; });
   kharcha.forEach(function(x){ ds[x.date]=1; });
@@ -1652,6 +1675,13 @@ liveData.bikri   = LOCAL.getBikri();
 liveData.kharcha = LOCAL.getKharcha();
 liveData.udhaar  = LOCAL.getUdhaar();
 liveData.stock   = LOCAL.getStock();
+
+// Restore deleted IDs tracker from localStorage
+try {
+  liveData.deletedIds = JSON.parse(localStorage.getItem('sh_deleted_ids') || '{}');
+} catch(e) {
+  liveData.deletedIds = {};
+}
 
 renderStockCategoryOptions();
 onStockCategoryChange();
