@@ -114,7 +114,7 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
   </div>
 
   <div class="card" style="background:#e3f2fd;">
-    <h3 style="color:#1565c0;">👥 Login Credentials</h3>
+    <h3 style="color:#1565c0;">?? Login Credentials</h3>
     <p style="font-size:14px;color:#333;line-height:1.8;">
       <b>User 1:</b><br>
       Username: <code style="background:#f5f5f5; padding:2px 6px; border-radius:4px;">sanjeev</code><br>
@@ -126,7 +126,6 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
   </div>
 
   <div class="card" style="background:#e3f2fd;">
-    <h3 style="color:#1565c0;">&#128241; Share with 2nd Person</h3>
     <p style="font-size:14px;color:#333;line-height:1.7;">
       1. Send the <b>index.html</b> file to the second phone (via WhatsApp, email, etc.)<br>
       2. Open it in Chrome on the second phone<br>
@@ -172,13 +171,13 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
     <input type="number" id="b-amount" placeholder="e.g. 500" min="0"/>
     <label>Description (optional)</label>
     <input type="text" id="b-desc" placeholder="e.g. Nails, Bolts, Pipe..."/>
-    <label>Sold From Stock (optional)</label>
-    <select id="b-stock-id" onchange="onBikriStockChange()">
-      <option value="">-- Not from stock --</option>
+    <label>Sold Product (optional)</label>
+    <select id="b-sold-category" onchange="onBikriCategoryChange()" style="margin-bottom:6px">
+      <option value="">-- Select category (optional) --</option>
     </select>
-    <label id="b-stock-qty-label" style="display:none">Quantity Sold</label>
-    <input type="number" id="b-stock-qty" placeholder="e.g. 2" min="0" style="display:none"/>
-    <div id="b-stock-hint" class="li-sub" style="display:none;margin-bottom:8px"></div>
+    <select id="b-sold-product" onchange="onBikriProductChange()" style="display:none;margin-bottom:10px">
+      <option value="">-- Select product --</option>
+    </select>
     <label>Payment Received Via</label>
     <div class="pay-mode">
       <div class="pay-btn selected" id="pm-cash" onclick="selectPayMode('cash')">&#128181; Cash</div>
@@ -229,19 +228,11 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
       <input type="text" id="s-new-product" placeholder="Add new product in selected category" style="margin-bottom:0;flex:1;"/>
       <button class="btn btn-gray" type="button" style="width:auto;padding:10px 12px;margin-bottom:0;" onclick="addStockProduct()">Add Product</button>
     </div>
-    <label>Quantity</label>
-    <input type="number" id="s-qty" placeholder="e.g. 50" min="0"/>
-    <label>Unit</label>
-    <select id="s-unit">
-      <option value="pcs">Pieces</option>
-      <option value="kg">Kg</option>
-      <option value="box">Box</option>
-      <option value="meter">Meter</option>
-      <option value="other">Other</option>
-    </select>
-    <label>Cost Per Unit (optional)</label>
-    <input type="number" id="s-cost" placeholder="e.g. 120" min="0"/>
-    <button class="btn btn-blue" onclick="addOrUpdateStock()">&#128190; Save Stock</button>
+    <label>Amount Paid (&#8377;)</label>
+    <input type="number" id="s-cost" placeholder="e.g. 5000" min="0"/>
+    <label>Date</label>
+    <input type="date" id="s-date"/>
+    <button class="btn btn-blue" onclick="addOrUpdateStock()">&#128190; Save Purchase</button>
   </div>
   <div class="card">
     <h3>&#128203; Current Stock</h3>
@@ -280,6 +271,13 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 
 <!-- HISTORY -->
 <div id="page-history" class="page">
+  <div class="card">
+    <h3>&#128269; Search &amp; Delete Entries</h3>
+    <input type="number" id="search-amt" placeholder="Search by amount e.g. 184750" min="0" style="margin-bottom:6px"/>
+    <input type="text" id="search-desc" placeholder="Or search by description" style="margin-bottom:6px"/>
+    <button class="btn btn-gray" onclick="searchEntries()" style="margin-bottom:0">&#128269; Search</button>
+    <div id="search-results" style="margin-top:10px"></div>
+  </div>
   <div class="card">
     <h3>&#128197; Day-wise Summary</h3>
     <div id="history-list"><div class="empty">No records yet.</div></div>
@@ -400,7 +398,7 @@ label { display:block; font-size:13px; color:#555; margin-bottom:4px; font-weigh
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
 <script>
-// ── Local fallback storage ──────────────────────────────
+// -- Local fallback storage ------------------------------
 var LOCAL = {
   getBikri:   function(){ return JSON.parse(localStorage.getItem('sh_bikri')||'[]'); },
   getKharcha: function(){ return JSON.parse(localStorage.getItem('sh_kharcha')||'[]'); },
@@ -412,7 +410,7 @@ var LOCAL = {
   setStock:   function(v){ localStorage.setItem('sh_stock',JSON.stringify(v)); }
 };
 
-// ── User session management ─────────────────────────────
+// -- User session management -----------------------------
 var currentUserId = null;
 var currentUserName = null;
 
@@ -428,14 +426,14 @@ function verifyLogin(){
   var errorDiv = document.getElementById('login-error');
   
   if(!username || !password){
-    errorDiv.textContent = '❌ Enter username and password';
+    errorDiv.textContent = '? Enter username and password';
     errorDiv.style.display = 'block';
     return;
   }
   
   var user = USERS[username];
   if(!user || user.password !== password){
-    errorDiv.textContent = '❌ Invalid username or password';
+    errorDiv.textContent = '? Invalid username or password';
     errorDiv.style.display = 'block';
     return;
   }
@@ -449,7 +447,7 @@ function loginUser(userId, userName){
   localStorage.setItem('sh_current_user_id', userId);
   localStorage.setItem('sh_current_user_name', userName);
   document.getElementById('login-overlay').style.display = 'none';
-  document.getElementById('current-user').textContent = '👤 ' + userName;
+  document.getElementById('current-user').textContent = '?? ' + userName;
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-error').style.display = 'none';
@@ -472,13 +470,13 @@ function checkLogin(){
     currentUserId = savedId;
     currentUserName = savedName;
     document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('current-user').textContent = '👤 ' + savedName;
+    document.getElementById('current-user').textContent = '?? ' + savedName;
   } else {
     document.getElementById('login-overlay').style.display = 'flex';
   }
 }
 
-// ── Firebase state ──────────────────────────────────────
+// -- Firebase state --------------------------------------
 var db = null;
 var fbRef = null;
 var useFirebase = false;
@@ -578,6 +576,7 @@ function listenFirebase(){
         saveStockCatalog(STOCK_CATALOG);
         renderStockCategoryOptions();
         onStockCategoryChange();
+        initBikriCategoryOptions();
       }
     } else {
       syncStockCatalog();
@@ -660,7 +659,7 @@ function setSyncStatus(ok){
   document.getElementById('sync-status').textContent = ok ? 'Synced with cloud \u2601\uFE0F' : 'Not connected to cloud';
 }
 
-// ── Data accessors ──────────────────────────────────────
+// -- Data accessors --------------------------------------
 function getBikri()  { return useFirebase ? liveData.bikri   : LOCAL.getBikri();   }
 function getKharcha(){ return useFirebase ? liveData.kharcha : LOCAL.getKharcha(); }
 function getUdhaar() { return useFirebase ? liveData.udhaar  : LOCAL.getUdhaar();  }
@@ -728,7 +727,7 @@ function deleteData(path, fbKey, id, cb){
   }
 }
 
-// ── Utils ───────────────────────────────────────────────
+// -- Utils -----------------------------------------------
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(d){ if(!d) return ''; var p=d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
 function rs(n){ return '\u20B9'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2}); }
@@ -738,7 +737,7 @@ function toast(msg){
   setTimeout(function(){ t.classList.remove('show'); },2500);
 }
 
-// ── Navigation ──────────────────────────────────────────
+// -- Navigation ------------------------------------------
 function showPage(name){
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
@@ -753,7 +752,7 @@ function showPage(name){
   if(name==='setup')     loadConfigFields();
 }
 
-// ── Setup ───────────────────────────────────────────────
+// -- Setup -----------------------------------------------
 function loadConfigFields(){
   // Setup page loads - no manual config needed, Firebase auto-connects
 }
@@ -906,20 +905,53 @@ function onStockCategoryChange(){
   renderStockProductOptions(cat);
 }
 
+// ── Bikri sold-product picker ───────────────────────────
+function initBikriCategoryOptions(){
+  var sel = document.getElementById('b-sold-category');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">-- Select category (optional) --</option>' +
+    STOCK_CATALOG.map(function(c){
+      return '<option value="'+c.category+'">'+c.category+'</option>';
+    }).join('');
+  document.getElementById('b-sold-product').style.display = 'none';
+  document.getElementById('b-sold-product').innerHTML = '<option value="">-- Select product --</option>';
+}
+
+function onBikriCategoryChange(){
+  var cat = document.getElementById('b-sold-category').value;
+  var prodSel = document.getElementById('b-sold-product');
+  if(!cat){
+    prodSel.style.display = 'none';
+    prodSel.innerHTML = '<option value="">-- Select product --</option>';
+    return;
+  }
+  var g = STOCK_CATALOG.find(function(x){ return x.category===cat; });
+  prodSel.innerHTML = '<option value="">-- Select product --</option>' +
+    (g ? g.products.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('') : '');
+  prodSel.style.display = 'block';
+}
+
+function onBikriProductChange(){
+  var cat = document.getElementById('b-sold-category').value;
+  var prod = document.getElementById('b-sold-product').value;
+  if(prod){
+    document.getElementById('b-desc').value = prod + ' (' + cat + ')';
+  }
+}
+
 function toggleStockCategory(category){
   stockOpenCategory = stockOpenCategory===category ? '' : category;
   renderStock();
 }
 
 function seedStockCatalog(){
-  if(localStorage.getItem('sh_seeded_catalog_v4')==='1') return;
-
-  var seeded = normalizeStockToCatalog(LOCAL.getStock());
-
-  LOCAL.setStock(seeded);
-  liveData.stock = seeded;
+  // v5: clear old qty-based stock data, keep catalog structure only
+  if(localStorage.getItem('sh_seeded_catalog_v5')==='1') return;
+  LOCAL.setStock([]);
+  liveData.stock = [];
   localStorage.setItem('sh_seeded_catalog_v3','1');
   localStorage.setItem('sh_seeded_catalog_v4','1');
+  localStorage.setItem('sh_seeded_catalog_v5','1');
   syncStockCatalog();
 }
 
@@ -993,151 +1025,113 @@ function addStockProduct(){
   });
 }
 
-// ── Stock ──────────────────────────────────────────────
+// -- Stock ----------------------------------------------
 function addOrUpdateStock(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
   var category = document.getElementById('s-category').value;
   var name = document.getElementById('s-name').value.trim();
-  var qty = parseFloat(document.getElementById('s-qty').value);
-  var unit = document.getElementById('s-unit').value;
-  var cost = parseFloat(document.getElementById('s-cost').value||0);
+  var amt = parseFloat(document.getElementById('s-cost').value||0);
+  var date = document.getElementById('s-date').value;
   if(!category){ toast('\u274C Select category'); return; }
   if(!name){ toast('\u274C Select product'); return; }
-  if(isNaN(qty) || qty<0){ toast('\u274C Enter valid quantity'); return; }
+  if(!amt || amt<=0){ toast('\u274C Enter amount paid'); return; }
+  if(!date){ toast('\u274C Select date'); return; }
 
-  var all = getStock();
-  var existing = all.find(function(x){
-    return (x.name||'').toLowerCase()===name.toLowerCase() && (x.category||'')===category;
-  });
-  if(existing){
-    var updated = JSON.parse(JSON.stringify(existing));
-    updated.category = category;
-    updated.qty = qty;
-    updated.unit = unit;
-    updated.cost = cost;
-    updated.userId = currentUserId;
-    updated.userName = currentUserName;
-    updated.editTime = new Date().toLocaleString();
-    updateData('stock', existing.fbKey, existing.id, updated, function(){
-      toast('\u2705 Stock updated by '+currentUserName+'!');
-      renderStock();
-    });
-  } else {
-    pushData('stock', {
-      id: Date.now(),
-      category: category,
-      name: name,
-      qty: qty,
-      unit: unit,
-      cost: cost,
+  var purchaseRecord = {
+    id: Date.now(),
+    category: category,
+    name: name,
+    amt: amt,
+    date: date,
+    userId: currentUserId,
+    userName: currentUserName,
+    editTime: new Date().toLocaleString()
+  };
+
+  pushData('stock', purchaseRecord, function(){
+    // Auto-create kharcha entry for this purchase
+    var kharchaEntry = {
+      id: Date.now()+1,
+      date: date,
+      amt: amt,
+      desc: 'Stock purchased: '+name+' ('+category+')',
       userId: currentUserId,
       userName: currentUserName,
       editTime: new Date().toLocaleString()
-    }, function(){
-      toast('\u2705 Stock added by '+currentUserName+'!');
+    };
+    pushData('kharcha', kharchaEntry, function(){
+      toast('\u2705 Purchase saved & added to kharcha by '+currentUserName+'!');
+      renderDashboard();
       renderStock();
     });
-  }
+  });
 
   onStockCategoryChange();
-  document.getElementById('s-qty').value='';
   document.getElementById('s-cost').value='';
+  document.getElementById('s-date').value=todayStr();
 }
 
 function renderStock(){
-  var all = normalizeStockToCatalog(getStock());
+  var all = getStock();
   var el = document.getElementById('stock-list');
   if(!el) return;
-  if(!all.length){ el.innerHTML='<div class="empty">No stock items yet.</div>'; return; }
 
-  var byKey = {};
-  all.forEach(function(s){ byKey[stockKey(s.category, s.name)] = s; });
+  // Group purchase records by category+product
+  var purchases = {};
+  all.forEach(function(s){
+    var amount = Number(s.amt || s.cost || 0);
+    if(!s.category || !s.name) return;
+    var k = stockKey(s.category, s.name);
+    if(!purchases[k]) purchases[k] = { category: s.category, name: s.name, records: [] };
+    if(amount > 0) purchases[k].records.push(s);
+  });
 
   el.innerHTML = STOCK_CATALOG.map(function(group){
     var isOpen = stockOpenCategory===group.category;
-    var body = group.products.map(function(name){
-      var s = byKey[stockKey(group.category, name)] || {category:group.category,name:name,qty:0,unit:'pcs',cost:0,id:0};
-      var qtyNum = Number(s.qty||0);
-      var qtyClass = qtyNum<=5 ? 'badge-red' : 'badge-green';
-      return '<div class="list-item"><div class="li-top"><div>'+
-        '<div class="li-name">'+name+'</div>'+
-        '<div class="li-sub">Cost: '+rs(s.cost||0)+' / '+(s.unit||'pcs')+'<br><small style="color:#999;font-size:11px">By '+(s.userName||'Unknown')+' ('+(s.editTime||'')+')</small></div>'+
-        '</div><div style="text-align:right">'+
-        '<div class="li-amt"><span class="badge '+qtyClass+'">'+qtyNum+' '+(s.unit||'pcs')+'</span></div>'+
-        '<button class="btn btn-gray" style="width:auto;padding:7px 10px;font-size:12px;margin-top:6px;margin-bottom:0" onclick="fillStockForm('+s.id+')">Edit</button>'+
-        '</div></div></div>';
-    }).join('');
+    var productRows = group.products.map(function(name){
+      var k = stockKey(group.category, name);
+      var data = purchases[k];
+      if(!data || !data.records.length) return '';
+      var recs = data.records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      var total = recs.reduce(function(a,r){ return a + Number(r.amt||r.cost||0); }, 0);
+      var recHtml = recs.map(function(r){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f5f5f5">'+
+          '<span style="font-size:13px;color:#555">'+fmtDate(r.date||'')+'<br><small style="color:#bbb">'+(r.userName||'Unknown')+'</small></span>'+
+          '<span style="font-weight:bold;color:#b71c1c">'+rs(r.amt||r.cost||0)+'</span>'+
+          '</div>';
+      }).join('');
+      return '<div class="list-item">'+
+        '<div class="li-top"><div><div class="li-name">'+name+'</div>'+
+        '<div class="li-sub">Total invested: <b style="color:#2e7d32">'+rs(total)+'</b> &middot; '+recs.length+' purchase'+(recs.length>1?'s':'')+'</div>'+
+        '</div></div>'+
+        '<div style="margin-top:8px">'+recHtml+'</div>'+
+        '</div>';
+    }).filter(Boolean).join('');
+
+    var activeCount = group.products.filter(function(name){
+      var k = stockKey(group.category, name);
+      return purchases[k] && purchases[k].records.length > 0;
+    }).length;
 
     return '<div class="card" style="margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStockCategory(\''+group.category+'\')">'+
       '<h3 style="margin-bottom:0;color:#1565c0">'+group.category+'</h3>'+
-      '<span class="badge badge-blue">'+(isOpen?'Hide':'Show')+'</span></div>'+
-      (isOpen?('<div style="margin-top:10px">'+body+'</div>'):'')+
+      '<span class="badge badge-blue">'+(activeCount ? activeCount+' product'+(activeCount>1?'s':'') : 'No purchases')+' '+(isOpen?'\u25B2':'\u25BC')+'</span></div>'+
+      (isOpen?('<div style="margin-top:10px">'+(productRows||'<div class="empty">No purchases in this category yet.</div>')+'</div>'):'')+
       '</div>';
   }).join('');
-
-  refreshBikriStockOptions();
 }
 
 function fillStockForm(id){
-  var s = getStock().find(function(x){ return x.id===id; });
-  if(!s) return;
-  showPage('stock');
-  document.getElementById('s-category').value = s.category || STOCK_CATALOG[0].category;
-  onStockCategoryChange();
-  document.getElementById('s-name').value = s.name || '';
-  document.getElementById('s-qty').value = s.qty || 0;
-  document.getElementById('s-unit').value = s.unit || 'pcs';
-  document.getElementById('s-cost').value = s.cost || 0;
+  // Stock entries are now purchase records � edit not supported.
+  // Left as stub for compatibility.
 }
 
-function refreshBikriStockOptions(){
-  var select = document.getElementById('b-stock-id');
-  if(!select) return;
-  var prev = select.value;
-  var items = getStock().slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  var opts = ['<option value="">-- Not from stock --</option>'];
-  items.forEach(function(s){
-    var q = Number(s.qty||0);
-    opts.push('<option value="'+s.id+'">['+(s.category||'General')+'] '+(s.name||'Product')+' (Stock: '+q+' '+(s.unit||'pcs')+')</option>');
-  });
-  select.innerHTML = opts.join('');
-  if(prev && items.some(function(s){ return String(s.id)===String(prev); })){
-    select.value = prev;
-  }
-  onBikriStockChange();
-}
+function refreshBikriStockOptions(){ /* stock qty tracking removed */ }
 
-function onBikriStockChange(){
-  var select = document.getElementById('b-stock-id');
-  var qtyLabel = document.getElementById('b-stock-qty-label');
-  var qtyInput = document.getElementById('b-stock-qty');
-  var hint = document.getElementById('b-stock-hint');
-  if(!select || !qtyLabel || !qtyInput || !hint) return;
+function onBikriStockChange(){ /* stock qty tracking removed */ }
 
-  if(!select.value){
-    qtyLabel.style.display='none';
-    qtyInput.style.display='none';
-    hint.style.display='none';
-    qtyInput.value='';
-    qtyInput.removeAttribute('max');
-    return;
-  }
-
-  var id = parseInt(select.value,10);
-  var s = getStock().find(function(x){ return x.id===id; });
-  qtyLabel.style.display='block';
-  qtyInput.style.display='block';
-  if(s){
-    qtyInput.setAttribute('max', String(Number(s.qty||0)));
-    hint.style.display='block';
-    hint.textContent = 'Available stock: '+Number(s.qty||0)+' '+(s.unit||'pcs');
-  } else {
-    hint.style.display='none';
-  }
-}
-
-// ── Payment mode ────────────────────────────────────────
+// -- Payment mode ----------------------------------------
 var payMode='cash';
 function selectPayMode(m){
   payMode=m;
@@ -1153,7 +1147,7 @@ function selectRPayMode(m){
   document.getElementById('r-online-fields').style.display=m==='online'?'block':'none';
 }
 
-// ── Bikri ───────────────────────────────────────────────
+// -- Bikri -----------------------------------------------
 function addBikri(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
   var amt  = parseFloat(document.getElementById('b-amount').value);
@@ -1161,70 +1155,33 @@ function addBikri(){
   var date = document.getElementById('b-date').value;
   var plat = payMode==='online'?(document.getElementById('b-platform').value||'Online'):'';
   var acc  = payMode==='online'?document.getElementById('b-account').value.trim():'';
-  var stockIdRaw = document.getElementById('b-stock-id').value;
-  var soldQty = parseFloat(document.getElementById('b-stock-qty').value||0);
-  var stockId = stockIdRaw ? parseInt(stockIdRaw,10) : null;
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
   if(!date){ toast('\u274C Select date'); return; }
   if(payMode==='online'&&!plat){ toast('\u274C Select payment platform'); return; }
 
-  var soldProduct = '';
-  var soldUnit = '';
-  var stockItem = null;
-  if(stockId){
-    stockItem = getStock().find(function(x){ return x.id===stockId; });
-    if(!stockItem){ toast('\u274C Selected stock item not found'); return; }
-    if(!soldQty || soldQty<=0){ toast('\u274C Enter sold quantity'); return; }
-    if(soldQty > Number(stockItem.qty||0)){ toast('\u274C Sold quantity is more than stock'); return; }
-    soldProduct = stockItem.name || '';
-    soldUnit = stockItem.unit || 'pcs';
-  }
-
-  var saveSale = function(){
-    var obj = {
-      id:Date.now(),
-      date:date,
-      amt:amt,
-      desc:desc,
-      mode:payMode,
-      platform:plat,
-      account:acc,
-      soldStockId:stockId,
-      soldProduct:soldProduct,
-      soldQty:stockId ? soldQty : 0,
-      soldUnit:soldUnit,
-      userId:currentUserId,
-      userName:currentUserName,
-      editTime:new Date().toLocaleString()
-    };
-    pushData('bikri',obj,function(){
-      ['b-amount','b-desc','b-account','b-stock-qty'].forEach(function(i){ document.getElementById(i).value=''; });
-      document.getElementById('b-platform').value='';
-      document.getElementById('b-stock-id').value='';
-      onBikriStockChange();
-      selectPayMode('cash');
-      toast('\u2705 Sale saved by '+currentUserName+'!');
-      renderDashboard();
-      refreshBikriStockOptions();
-    });
+  var obj = {
+    id:Date.now(),
+    date:date,
+    amt:amt,
+    desc:desc,
+    mode:payMode,
+    platform:plat,
+    account:acc,
+    userId:currentUserId,
+    userName:currentUserName,
+    editTime:new Date().toLocaleString()
   };
-
-  if(stockItem){
-    var updatedStock = JSON.parse(JSON.stringify(stockItem));
-    updatedStock.qty = Number(updatedStock.qty||0) - soldQty;
-    updatedStock.userId = currentUserId;
-    updatedStock.userName = currentUserName;
-    updatedStock.editTime = new Date().toLocaleString();
-    updateData('stock', stockItem.fbKey, stockItem.id, updatedStock, function(){
-      renderStock();
-      saveSale();
-    });
-  } else {
-    saveSale();
-  }
+  pushData('bikri',obj,function(){
+    ['b-amount','b-desc','b-account'].forEach(function(i){ document.getElementById(i).value=''; });
+    document.getElementById('b-platform').value='';
+    selectPayMode('cash');
+    initBikriCategoryOptions();
+    toast('\u2705 Sale saved by '+currentUserName+'!');
+    renderDashboard();
+  });
 }
 
-// ── Kharcha ─────────────────────────────────────────────
+// -- Kharcha ---------------------------------------------
 function addKharcha(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
   var amt  = parseFloat(document.getElementById('k-amount').value);
@@ -1239,7 +1196,7 @@ function addKharcha(){
   });
 }
 
-// ── Udhaar ──────────────────────────────────────────────
+// -- Udhaar ----------------------------------------------
 function addUdhaar(){
   if(!currentUserId){ toast('\u274C Login first'); return; }
   var name  = document.getElementById('u-name').value.trim();
@@ -1403,7 +1360,7 @@ function receiveUdhaar(){
   });
 }
 
-// ── Edit Transactions ──────────────────────────────────
+// -- Edit Transactions ----------------------------------
 var editPayMode = 'cash';
 function selectEditPayMode(m){
   editPayMode = m;
@@ -1500,46 +1457,11 @@ function deleteTxn(type,id,fbKey){
   if(type==='bikri'){
     var rowB = getBikri().find(function(x){ return x.id===id; });
     if(!rowB){ toast('\u274C Transaction not found'); return; }
-
-    var doDeleteBikri = function(){
-      deleteData('bikri', fbKey || rowB.fbKey || null, id, function(){
-        toast('\u2705 Sale deleted by '+currentUserName+'!');
-        renderDashboard();
-        renderHistory();
-        renderStock();
-        refreshBikriStockOptions();
-      });
-    };
-
-    var soldQty = Number(rowB.soldQty||0);
-    if(soldQty>0){
-      var stocks = getStock();
-      var target = null;
-
-      if(rowB.soldStockId!==undefined && rowB.soldStockId!==null){
-        target = stocks.find(function(s){ return String(s.id)===String(rowB.soldStockId); }) || null;
-      }
-      if(!target && rowB.soldProduct){
-        target = stocks.find(function(s){
-          return (s.name||'').toLowerCase()===(rowB.soldProduct||'').toLowerCase() &&
-            (!rowB.soldUnit || (s.unit||'')===(rowB.soldUnit||''));
-        }) || null;
-      }
-
-      if(target){
-        var updatedStock = JSON.parse(JSON.stringify(target));
-        updatedStock.qty = Number(updatedStock.qty||0) + soldQty;
-        updatedStock.userId = currentUserId;
-        updatedStock.userName = currentUserName;
-        updatedStock.editTime = new Date().toLocaleString();
-        updateData('stock', target.fbKey, target.id, updatedStock, function(){
-          doDeleteBikri();
-        });
-        return;
-      }
-    }
-
-    doDeleteBikri();
+    deleteData('bikri', fbKey || rowB.fbKey || null, id, function(){
+      toast('\u2705 Sale deleted by '+currentUserName+'!');
+      renderDashboard();
+      renderHistory();
+    });
     return;
   }
 
@@ -1552,7 +1474,7 @@ function deleteTxn(type,id,fbKey){
   });
 }
 
-// ── Dashboard ───────────────────────────────────────────
+// -- Dashboard -------------------------------------------
 function setDashToday(){ document.getElementById('dash-date').value=todayStr(); renderDashboard(); }
 
 function renderDashboard(){
@@ -1620,7 +1542,63 @@ function renderDashboard(){
   }).join('');
 }
 
-// ── History ─────────────────────────────────────────────
+// -- Search entries --------------------------------------
+function searchEntries(){
+  var amtRaw = document.getElementById('search-amt').value.trim();
+  var descRaw = document.getElementById('search-desc').value.trim().toLowerCase();
+  var el = document.getElementById('search-results');
+
+  if(!amtRaw && !descRaw){
+    el.innerHTML = '<div class="empty">Enter amount or description to search.</div>';
+    return;
+  }
+
+  var amt = amtRaw ? parseFloat(amtRaw) : null;
+
+  var matches = [];
+  getBikri().forEach(function(x){
+    var amtMatch = amt===null || Math.abs(Number(x.amt||0) - amt) < 0.01;
+    var descMatch = !descRaw || (x.desc||'').toLowerCase().indexOf(descRaw)>=0;
+    if(amtMatch && descMatch) matches.push(Object.assign({},x,{_type:'bikri'}));
+  });
+  getKharcha().forEach(function(x){
+    var amtMatch = amt===null || Math.abs(Number(x.amt||0) - amt) < 0.01;
+    var descMatch = !descRaw || (x.desc||'').toLowerCase().indexOf(descRaw)>=0;
+    if(amtMatch && descMatch) matches.push(Object.assign({},x,{_type:'kharcha'}));
+  });
+
+  if(!matches.length){
+    el.innerHTML = '<div class="empty">No entries found.</div>';
+    return;
+  }
+
+  el.innerHTML = matches.map(function(x){
+    var label = x._type==='bikri'
+      ? '<span style="color:#2e7d32">\u2705 Sale</span>'
+      : '<span style="color:#b71c1c">\uD83D\uDCB8 Kharcha</span>';
+    return '<div class="list-item"><div class="li-top"><div>'+
+      '<div class="li-name">'+label+' &mdash; '+(x.desc||'(no description)')+'</div>'+
+      '<div class="li-sub">'+fmtDate(x.date||'')+'<br><small style="color:#999">By '+(x.userName||'Unknown')+'</small></div>'+
+      '</div><div style="text-align:right">'+
+      '<div class="li-amt '+(x._type==='bikri'?'val-green':'val-red')+'">'+rs(x.amt)+'</div>'+
+      '<button class="btn btn-red" style="width:auto;padding:6px 10px;font-size:12px;margin-top:6px;margin-bottom:0" '+
+        'onclick="deleteSearchEntry(\''+x._type+'\','+x.id+',\''+(x.fbKey||'')+'\')">Delete</button>'+
+      '</div></div></div>';
+  }).join('');
+}
+
+function deleteSearchEntry(type, id, fbKey){
+  if(!currentUserId){ toast('\u274C Login first'); return; }
+  if(!confirm('Delete this entry?')) return;
+  deleteData(type, fbKey||null, id, function(){
+    toast('\u2705 Entry deleted!');
+    renderDashboard();
+    renderHistory();
+    searchEntries();
+  });
+}
+
+// -- History ---------------------------------------------
 function renderHistory(){
   var bikri=getBikri(), kharcha=getKharcha(), udhaar=getUdhaar();
   var ds={};
@@ -1650,7 +1628,7 @@ function renderHistory(){
 
 function jumpToDash(date){ document.getElementById('dash-date').value=date; showPage('dashboard'); }
 
-// ── Export ──────────────────────────────────────────────
+// -- Export ----------------------------------------------
 function exportCSV(){
   var rows=[['Type','Date','Amount','Description','Mode','Platform','Account']];
   getBikri().forEach(function(x){ rows.push(['Sale',x.date,x.amt,x.desc||'',x.mode,x.platform||'',x.account||'']); });
@@ -1664,7 +1642,7 @@ function exportCSV(){
   toast('\uD83D\uDCE4 CSV downloaded!');
 }
 
-// ── Init ────────────────────────────────────────────────
+// -- Init ------------------------------------------------
 document.getElementById('dash-date').value = todayStr();
 document.getElementById('b-date').value    = todayStr();
 document.getElementById('k-date').value    = todayStr();
@@ -1677,14 +1655,14 @@ liveData.stock   = LOCAL.getStock();
 
 renderStockCategoryOptions();
 onStockCategoryChange();
+document.getElementById('s-date').value = todayStr();
+initBikriCategoryOptions();
 seedStockCatalog();
 
 checkLogin();
 
 // Always initialize Firebase with hardcoded config (no manual setup needed)
 initFirebase(HARDCODED_CONFIG);
-
-refreshBikriStockOptions();
 </script>
 </body>
 </html>
