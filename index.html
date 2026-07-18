@@ -876,6 +876,23 @@ function stockKey(category, name){
   return String(category||'').trim().toLowerCase()+'|'+String(name||'').trim().toLowerCase();
 }
 
+function parseStockLinkFromDesc(desc){
+  var text = String(desc||'').trim();
+  var match = text.match(/^(.+?)\s*\((.+)\)$/);
+  if(!match) return null;
+  return { name: match[1].trim(), category: match[2].trim() };
+}
+
+function getSaleStockLink(row){
+  if(!row) return null;
+  var soldProduct = String(row.soldProduct||'').trim();
+  var soldCategory = String(row.soldCategory||'').trim();
+  if(soldProduct){
+    return { name: soldProduct, category: soldCategory };
+  }
+  return parseStockLinkFromDesc(row.desc);
+}
+
 function normalizeStockToCatalog(arr){
   var map = {};
   (arr||[]).forEach(function(s){
@@ -1103,8 +1120,18 @@ function addOrUpdateStock(){
 
 function renderStock(){
   var all = getStock();
+  var sales = {};
   var el = document.getElementById('stock-list');
   if(!el) return;
+
+  getBikri().forEach(function(s){
+    var link = getSaleStockLink(s);
+    if(!link || !link.name) return;
+    var k = stockKey(link.category||'', link.name);
+    if(!sales[k]) sales[k] = { records: [], total: 0 };
+    sales[k].records.push(s);
+    sales[k].total += Number(s.amt||0);
+  });
 
   // Group purchase records by category+product
   var purchases = {};
@@ -1124,6 +1151,15 @@ function renderStock(){
       if(!data || !data.records.length) return '';
       var recs = data.records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
       var total = recs.reduce(function(a,r){ return a + Number(r.amt||r.cost||0); }, 0);
+      var saleData = sales[k] || { records: [], total: 0 };
+      var soldTotal = Number(saleData.total||0);
+      var remaining = Math.max(0, total - soldTotal);
+      var salesRows = saleData.records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).map(function(s){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f5f5f5">'+
+          '<span style="font-size:13px;color:#555">'+fmtDate(s.date||'')+'<br><small style="color:#bbb">Sold by '+(s.userName||'Unknown')+' '+(s.mode==='online' ? '· '+(s.platform||'Online') : '· Cash')+'</small></span>'+ 
+          '<span style="font-weight:bold;color:#1565c0">-'+rs(s.amt||0)+'</span>'+ 
+          '</div>';
+      }).join('');
       var recHtml = recs.map(function(r){
         return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f5f5f5">'+
           '<span style="font-size:13px;color:#555">'+fmtDate(r.date||'')+'<br><small style="color:#bbb">'+(r.userName||'Unknown')+'</small></span>'+
@@ -1132,9 +1168,10 @@ function renderStock(){
       }).join('');
       return '<div class="list-item">'+
         '<div class="li-top"><div><div class="li-name">'+name+'</div>'+
-        '<div class="li-sub">Total invested: <b style="color:#2e7d32">'+rs(total)+'</b> &middot; '+recs.length+' purchase'+(recs.length>1?'s':'')+'</div>'+
+        '<div class="li-sub">Invested: <b style="color:#2e7d32">'+rs(total)+'</b> &middot; Sold: <b style="color:#1565c0">'+rs(soldTotal)+'</b> &middot; Remaining: <b style="color:#e65100">'+rs(remaining)+'</b></div>'+ 
         '</div></div>'+
-        '<div style="margin-top:8px">'+recHtml+'</div>'+
+        '<div style="margin-top:8px"><div class="badge badge-green" style="margin-bottom:6px">Purchases</div>'+recHtml+'</div>'+ 
+        (saleData.records.length ? '<div style="margin-top:10px"><div class="badge badge-blue" style="margin-bottom:6px">Sales linked to this product</div>'+salesRows+'</div>' : '') +
         '</div>';
     }).filter(Boolean).join('');
 
@@ -1183,6 +1220,8 @@ function addBikri(){
   var amt  = parseFloat(document.getElementById('b-amount').value);
   var desc = document.getElementById('b-desc').value.trim();
   var date = document.getElementById('b-date').value;
+  var soldCategory = document.getElementById('b-sold-category').value || '';
+  var soldProduct = document.getElementById('b-sold-product').value || '';
   var plat = payMode==='online'?(document.getElementById('b-platform').value||'Online'):'';
   var acc  = payMode==='online'?document.getElementById('b-account').value.trim():'';
   if(!amt||amt<=0){ toast('\u274C Enter valid amount'); return; }
@@ -1194,6 +1233,8 @@ function addBikri(){
     date:date,
     amt:amt,
     desc:desc,
+    soldCategory:soldCategory,
+    soldProduct:soldProduct,
     mode:payMode,
     platform:plat,
     account:acc,
@@ -1452,6 +1493,8 @@ function saveTxnEdit(){
     updatedB.mode = editPayMode;
     updatedB.platform = editPayMode==='online' ? (document.getElementById('tx-platform').value || 'Online') : '';
     updatedB.account = editPayMode==='online' ? document.getElementById('tx-account').value.trim() : '';
+    updatedB.soldProduct = rowB.soldProduct || '';
+    updatedB.soldCategory = rowB.soldCategory || '';
     updatedB.userId = currentUserId;
     updatedB.userName = currentUserName;
     updatedB.editTime = new Date().toLocaleString();
@@ -1544,11 +1587,12 @@ function renderDashboard(){
   if(!all.length){ el.innerHTML='<div class="empty">No entries yet.</div>'; return; }
   el.innerHTML=all.map(function(x){
     if(x.type==='bikri'){
+      var saleLink = getSaleStockLink(x);
       var tag=x.mode==='cash'
         ?'<span class="badge badge-green">Cash</span>'
         :'<span class="badge badge-blue">'+(x.platform||'Online')+(x.account?' \u00B7 '+x.account:'')+'</span>';
-      var stockLine = x.soldProduct
-        ?'<br><small style="color:#6d4c41;font-size:11px">Product sold: '+x.soldProduct+' ('+Number(x.soldQty||0)+' '+(x.soldUnit||'pcs')+')</small>'
+      var stockLine = saleLink
+        ?'<br><small style="color:#6d4c41;font-size:11px">Product sold: '+saleLink.name+(saleLink.category?' ('+saleLink.category+')':'')+'</small>'
         :'';
       return '<div class="list-item"><div class="li-top"><div>'+
         '<div class="li-name" style="color:#2e7d32">\u2705 '+(x.desc||'Sale')+'</div>'+
