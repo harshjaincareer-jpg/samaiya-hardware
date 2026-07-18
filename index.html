@@ -1143,12 +1143,51 @@ function renderStock(){
     if(amount > 0) purchases[k].records.push(s);
   });
 
+  var categoryTotals = {};
+  Object.keys(purchases).forEach(function(k){
+    var row = purchases[k];
+    var invested = row.records.reduce(function(sum, r){ return sum + Number(r.amt || r.cost || 0); }, 0);
+    categoryTotals[row.category] = categoryTotals[row.category] || { invested: 0, sold: 0 };
+    categoryTotals[row.category].invested += invested;
+  });
+  Object.keys(sales).forEach(function(k){
+    var saleRows = sales[k].records || [];
+    var link = saleRows[0] ? getSaleStockLink(saleRows[0]) : null;
+    if(!link || !link.category) return;
+    categoryTotals[link.category] = categoryTotals[link.category] || { invested: 0, sold: 0 };
+    categoryTotals[link.category].sold += sales[k].total || 0;
+  });
+
+  var firstActiveCategory = null;
+  STOCK_CATALOG.forEach(function(group){
+    if(firstActiveCategory) return;
+    var hasData = group.products.some(function(name){
+      var k = stockKey(group.category, name);
+      return (purchases[k] && purchases[k].records.length) || (sales[k] && sales[k].records.length);
+    });
+    if(hasData) firstActiveCategory = group.category;
+  });
+  if(firstActiveCategory && (!stockOpenCategory || !STOCK_CATALOG.some(function(g){ return g.category===stockOpenCategory; }))) {
+    stockOpenCategory = firstActiveCategory;
+  }
+  if(firstActiveCategory && STOCK_CATALOG.some(function(g){ return g.category===firstActiveCategory; })) {
+    var currentOpenHasData = STOCK_CATALOG.some(function(group){
+      if(group.category!==stockOpenCategory) return false;
+      return group.products.some(function(name){
+        var k = stockKey(group.category, name);
+        return (purchases[k] && purchases[k].records.length) || (sales[k] && sales[k].records.length);
+      });
+    });
+    if(!currentOpenHasData) stockOpenCategory = firstActiveCategory;
+  }
+
   el.innerHTML = STOCK_CATALOG.map(function(group){
     var isOpen = stockOpenCategory===group.category;
+    var catTotal = categoryTotals[group.category] || { invested: 0, sold: 0 };
+    var catRemaining = Math.max(0, catTotal.invested - catTotal.sold);
     var productRows = group.products.map(function(name){
       var k = stockKey(group.category, name);
-      var data = purchases[k];
-      if(!data || !data.records.length) return '';
+      var data = purchases[k] || { records: [] };
       var recs = data.records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
       var total = recs.reduce(function(a,r){ return a + Number(r.amt||r.cost||0); }, 0);
       var saleData = sales[k] || { records: [], total: 0 };
@@ -1170,7 +1209,7 @@ function renderStock(){
         '<div class="li-top"><div><div class="li-name">'+name+'</div>'+
         '<div class="li-sub">Invested: <b style="color:#2e7d32">'+rs(total)+'</b> &middot; Sold: <b style="color:#1565c0">'+rs(soldTotal)+'</b> &middot; Remaining: <b style="color:#e65100">'+rs(remaining)+'</b></div>'+ 
         '</div></div>'+
-        '<div style="margin-top:8px"><div class="badge badge-green" style="margin-bottom:6px">Purchases</div>'+recHtml+'</div>'+ 
+        '<div style="margin-top:8px"><div class="badge badge-green" style="margin-bottom:6px">Purchases</div>'+(recHtml||'<div class="empty" style="padding:10px 0">No purchases yet.</div>')+'</div>'+ 
         (saleData.records.length ? '<div style="margin-top:10px"><div class="badge badge-blue" style="margin-bottom:6px">Sales linked to this product</div>'+salesRows+'</div>' : '') +
         '</div>';
     }).filter(Boolean).join('');
@@ -1183,7 +1222,8 @@ function renderStock(){
     return '<div class="card" style="margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStockCategory(\''+group.category+'\')">'+
       '<h3 style="margin-bottom:0;color:#1565c0">'+group.category+'</h3>'+
-      '<span class="badge badge-blue">'+(activeCount ? activeCount+' product'+(activeCount>1?'s':'') : 'No purchases')+' '+(isOpen?'\u25B2':'\u25BC')+'</span></div>'+
+      '<span class="badge badge-blue">'+(activeCount ? activeCount+' product'+(activeCount>1?'s':'') : 'All products')+' '+(isOpen?'\u25B2':'\u25BC')+'</span></div>'+
+      '<div class="li-sub" style="margin-top:6px">Invested: <b style="color:#2e7d32">'+rs(catTotal.invested)+'</b> &middot; Sold: <b style="color:#1565c0">'+rs(catTotal.sold)+'</b> &middot; Remaining: <b style="color:#e65100">'+rs(catRemaining)+'</b></div>'+
       (isOpen?('<div style="margin-top:10px">'+(productRows||'<div class="empty">No purchases in this category yet.</div>')+'</div>'):'')+
       '</div>';
   }).join('');
