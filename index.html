@@ -884,6 +884,13 @@ function parseStockLinkFromDesc(desc){
   return { name: match[1].trim(), category: match[2].trim() };
 }
 
+function parseStockPurchaseFromKharchaDesc(desc){
+  var text = String(desc||'').trim();
+  var match = text.match(/^Stock purchased:\s*(.+?)\s*\((.+)\)$/i);
+  if(!match) return null;
+  return { name: match[1].trim(), category: match[2].trim() };
+}
+
 function getSaleStockLink(row){
   if(!row) return null;
   var soldProduct = String(row.soldProduct||'').trim();
@@ -1122,9 +1129,18 @@ function addOrUpdateStock(){
 
 function renderStock(){
   var all = getStock();
+  var kharchaPurchases = {};
   var sales = {};
   var el = document.getElementById('stock-list');
   if(!el) return;
+
+  getKharcha().forEach(function(k){
+    var link = parseStockPurchaseFromKharchaDesc(k.desc);
+    if(!link || !link.name || !link.category) return;
+    var key = stockKey(link.category, link.name);
+    if(!kharchaPurchases[key]) kharchaPurchases[key] = { category: link.category, name: link.name, records: [] };
+    kharchaPurchases[key].records.push(k);
+  });
 
   getBikri().forEach(function(s){
     var link = getSaleStockLink(s);
@@ -1149,6 +1165,13 @@ function renderStock(){
   Object.keys(purchases).forEach(function(k){
     var row = purchases[k];
     var invested = row.records.reduce(function(sum, r){ return sum + Number(r.amt || r.cost || 0); }, 0);
+    categoryTotals[row.category] = categoryTotals[row.category] || { invested: 0, sold: 0 };
+    categoryTotals[row.category].invested += invested;
+  });
+  Object.keys(kharchaPurchases).forEach(function(k){
+    if(purchases[k] && purchases[k].records && purchases[k].records.length) return;
+    var row = kharchaPurchases[k];
+    var invested = row.records.reduce(function(sum, r){ return sum + Number(r.amt || 0); }, 0);
     categoryTotals[row.category] = categoryTotals[row.category] || { invested: 0, sold: 0 };
     categoryTotals[row.category].invested += invested;
   });
@@ -1179,7 +1202,7 @@ function renderStock(){
     var catRemaining = Math.max(0, catTotal.invested - catTotal.sold);
     var productRows = group.products.map(function(name){
       var k = stockKey(group.category, name);
-      var data = purchases[k] || { records: [] };
+      var data = purchases[k] && purchases[k].records.length ? purchases[k] : (kharchaPurchases[k] || { records: [] });
       var recs = data.records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
       var total = recs.reduce(function(a,r){ return a + Number(r.amt||r.cost||0); }, 0);
       var saleData = sales[k] || { records: [], total: 0 };
